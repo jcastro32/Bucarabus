@@ -1,0 +1,27 @@
+{
+  "name": "vue-bucarabus",
+  "version": "1.0.0",
+  "description": "BucaraBus Dashboard - Vue.js SPA",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore"
+  },
+  "dependencies": {
+    "axios": "^1.12.2",
+    "leaflet": "^1.9.4",
+    "pinia": "^2.1.0",
+    "socket.io-client": "^4.8.3",
+    "vue": "^3.3.0",
+    "vue-router": "^4.2.0",
+    "vue3-leaflet": "^1.0.45"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^4.2.0",
+    "eslint": "^8.40.0",
+    "eslint-plugin-vue": "^9.11.0",
+    "vite": "^4.3.0"
+  }
+}
