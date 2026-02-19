@@ -1,4 +1,5 @@
 import apiClient from './client.js'
+import { SYSTEM_USER_ID } from '../constants/system'
 
 /**
  * API de Buses
@@ -77,7 +78,7 @@ export const updateBus = async (plateNumber, busData) => {
  * @param {boolean} isActive - Nuevo estado
  * @param {string} userUpdate - Usuario que realiza el cambio
  */
-export const toggleBusStatus = async (plateNumber, isActive, userUpdate = 'system') => {
+export const toggleBusStatus = async (plateNumber, isActive, userUpdate = SYSTEM_USER_ID) => {
   const response = await apiClient.patch(`/buses/${plateNumber}/status`, {
     is_active: isActive,
     user_update: userUpdate
@@ -90,7 +91,7 @@ export const toggleBusStatus = async (plateNumber, isActive, userUpdate = 'syste
  * @param {string} plateNumber - Placa del bus
  * @param {string} userUpdate - Usuario que realiza la eliminación
  */
-export const deleteBus = async (plateNumber, userUpdate = 'system') => {
+export const deleteBus = async (plateNumber, userUpdate = SYSTEM_USER_ID) => {
   const response = await apiClient.delete(`/buses/${plateNumber}`, {
     data: { user_update: userUpdate }
   })

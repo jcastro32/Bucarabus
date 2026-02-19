@@ -115,6 +115,8 @@ export const useUsersStore = defineStore('users', () => {
 
     try {
       console.log('🔄 Creando usuario:', userData.email)
+      console.log('📦 Datos completos:', JSON.stringify(userData, null, 2))
+      console.log('🌐 URL base de apiClient:', apiClient.defaults.baseURL)
       const response = await apiClient.post('/users', userData)
       
       const newUser = response.data.data || response.data
@@ -262,7 +264,7 @@ export const useUsersStore = defineStore('users', () => {
     try {
       console.log('🔄 Asignando rol', roleId, 'a usuario', userId)
       const response = await apiClient.post(`/users/${userId}/roles`, { 
-        id_role: roleId 
+        roleId: roleId  // ✅ Corregido: usar "roleId" como espera el backend
       })
       
       // Actualizar usuario en la lista local

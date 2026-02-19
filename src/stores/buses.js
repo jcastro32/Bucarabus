@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as busesApi from '../api/buses.js'
+import { SYSTEM_USER_ID } from '../constants/system'
 
 export const useBusesStore = defineStore('buses', () => {
   // Estado
@@ -145,7 +146,7 @@ export const useBusesStore = defineStore('buses', () => {
   /**
    * Eliminar bus (soft delete)
    */
-  const deleteBus = async (plateNumber, userUpdate = 'admin') => {
+  const deleteBus = async (plateNumber, userUpdate = SYSTEM_USER_ID) => {
     loading.value = true
     error.value = null
 
@@ -178,7 +179,7 @@ export const useBusesStore = defineStore('buses', () => {
   /**
    * Cambiar estado del bus (activar/desactivar)
    */
-  const toggleBusStatus = async (plateNumber, isActive, userUpdate = 'admin') => {
+  const toggleBusStatus = async (plateNumber, isActive, userUpdate = SYSTEM_USER_ID) => {
     try {
       const result = await busesApi.toggleBusStatus(plateNumber, isActive, userUpdate)
       

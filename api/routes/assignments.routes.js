@@ -2,6 +2,7 @@ import express from 'express'
 import assignmentsService from '../services/assignments.service.js'
 
 const router = express.Router()
+const SYSTEM_USER_ID = 1;
 
 /**
  * POST /api/assignments - Asignar conductor a bus 
@@ -16,7 +17,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Placa requerida' });
     }
     
-    const result = await assignmentsService.assignDriver(plate_number, id_user, user || 'system');
+    const result = await assignmentsService.assignDriver(plate_number, id_user, user || SYSTEM_USER_ID);
     
     if (!result.success) {
       return res.status(400).json(result);
@@ -49,7 +50,7 @@ router.delete('/:plate', async (req, res) => {
     const { plate } = req.params;
     const { user } = req.body;
     
-    const result = await assignmentsService.unassignDriver(plate, user || 'system');
+    const result = await assignmentsService.unassignDriver(plate, user || SYSTEM_USER_ID);
     
     if (!result.success) {
       return res.status(400).json(result);

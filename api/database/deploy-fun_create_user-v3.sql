@@ -1,43 +1,20 @@
 -- =============================================
--- FUNCIÓN: fun_create_user v3.0
+-- DEPLOY: fun_create_user v3.0 - IDs Secuenciales
 -- =============================================
--- Descripción: Crea un nuevo usuario con validaciones completas
---              y asigna automáticamente el rol de Pasajero (id_role = 1)
---              Genera ID de forma secuencial (MAX + 1)
--- 
--- Parámetros IN:
---   wemail         - Email del usuario (VARCHAR 320)
---   wpassword_hash - Hash bcrypt de la contraseña (VARCHAR 60)
---   wfull_name     - Nombre completo del usuario (VARCHAR 100)
---   wavatar_url    - URL del avatar (VARCHAR 500, opcional)
---   wuser_create   - ID del usuario administrador que crea el usuario (INTEGER)
+-- Este script despliega la versión 3.0 de fun_create_user
+-- que genera IDs de forma secuencial (MAX + 1)
 --
--- Parámetros OUT:
---   success        - TRUE si el usuario se creó exitosamente
---   msg            - Mensaje descriptivo del resultado
---   error_code     - Código de error (NULL si success = TRUE)
---   id_user        - ID del usuario creado (NULL si falla)
---
--- Uso:
---   SELECT * FROM fun_create_user(
---     'juan@example.com',
---     '$2b$10$abc...',
---     'Juan Pérez',
---     1,
---     NULL
---   );
---
--- Retorna: (success, msg, error_code, id_user)
---
--- Versión: 3.0 - Generación secuencial de IDs
--- Fecha: 2026-02-18
+-- Ejecutar en: PostgreSQL 12+
+-- Base de datos: db_bucarabus
+-- Usuario: dlastre (o bucarabus_user)
 -- =============================================
 
--- Eliminar función anterior (diferentes firmas)
+-- Eliminar versiones anteriores
 DROP FUNCTION IF EXISTS fun_create_user(VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR);
 DROP FUNCTION IF EXISTS fun_create_user(VARCHAR, VARCHAR, VARCHAR, VARCHAR, INTEGER);
 DROP FUNCTION IF EXISTS fun_create_user(tab_users.email%TYPE, tab_users.password_hash%TYPE, tab_users.full_name%TYPE, tab_users.avatar_url%TYPE, tab_users.user_create%TYPE);
 
+-- Crear función v3.0
 CREATE OR REPLACE FUNCTION fun_create_user(
   wemail         tab_users.email%TYPE,
   wpassword_hash tab_users.password_hash%TYPE,
@@ -52,10 +29,6 @@ CREATE OR REPLACE FUNCTION fun_create_user(
 LANGUAGE plpgsql
 AS $$
 DECLARE
-  -- ==========================================
-  -- 1. SECCIÓN DE VARIABLES
-  -- ==========================================
-  
   -- Variables de validación
   v_user_exists  BOOLEAN;
   v_email_exists BOOLEAN;
@@ -69,10 +42,7 @@ DECLARE
   v_role_exists  BOOLEAN;
 
 BEGIN
-  -- ==========================================
-  -- 2. INICIALIZACIÓN
-  -- ==========================================
-  
+  -- Inicialización
   success := FALSE;
   msg := '';
   error_code := NULL;
@@ -80,10 +50,7 @@ BEGIN
   
   RAISE NOTICE '[fun_create_user] Iniciando creación de usuario: %', wemail;
   
-  -- ==========================================
-  -- 3. VALIDAR USUARIO CREADOR
-  -- ==========================================
-  
+  -- VALIDAR USUARIO CREADOR
   SELECT EXISTS(
     SELECT 1 FROM tab_users 
     WHERE tab_users.id_user = wuser_create AND tab_users.is_active = TRUE
@@ -96,11 +63,7 @@ BEGIN
     RETURN;
   END IF;
   
-  -- ==========================================
-  -- 4. VALIDAR NOMBRE COMPLETO
-  -- ==========================================
-  
-  -- 4.1. Validar NULL/vacío
+  -- VALIDAR NOMBRE COMPLETO
   IF wfull_name IS NULL OR TRIM(wfull_name) = '' THEN
     msg := 'El nombre completo no puede estar vacío';
     error_code := 'NAME_NULL_EMPTY';
@@ -108,10 +71,8 @@ BEGIN
     RETURN;
   END IF;
   
-  -- 4.2. Limpiar espacios extras
   v_name_clean := TRIM(REGEXP_REPLACE(wfull_name, '\s+', ' ', 'g'));
   
-  -- 4.3. Validar longitud mínima
   IF LENGTH(v_name_clean) < 2 THEN
     msg := 'El nombre debe tener al menos 2 caracteres. Recibido: "' || v_name_clean || '"';
     error_code := 'NAME_TOO_SHORT';
@@ -119,7 +80,6 @@ BEGIN
     RETURN;
   END IF;
   
-  -- 4.4. Validar longitud máxima (según esquema: VARCHAR(100))
   IF LENGTH(v_name_clean) > 100 THEN
     msg := 'El nombre no puede exceder 100 caracteres. Recibido: ' || LENGTH(v_name_clean) || ' caracteres';
     error_code := 'NAME_TOO_LONG';
@@ -127,8 +87,6 @@ BEGIN
     RETURN;
   END IF;
   
-  -- 4.5. Validar caracteres permitidos (letras, espacios, guiones, apóstrofes, acentos)
-  -- Permite: José María O'Connor-García
   IF v_name_clean !~ '^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ'' -]+$' THEN
     msg := 'El nombre contiene caracteres no permitidos. Solo se permiten letras, espacios, guiones y apóstrofes';
     error_code := 'NAME_INVALID_CHARS';
@@ -136,7 +94,6 @@ BEGIN
     RETURN;
   END IF;
   
-  -- 4.6. Validar que tenga al menos una letra
   IF v_name_clean !~ '[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]' THEN
     msg := 'El nombre debe contener al menos una letra';
     error_code := 'NAME_NO_LETTERS';
@@ -144,11 +101,7 @@ BEGIN
     RETURN;
   END IF;
   
-  -- ==========================================
-  -- 5. VALIDAR EMAIL
-  -- ==========================================
-  
-  -- 5.1. Validar NULL/vacío
+  -- VALIDAR EMAIL
   IF wemail IS NULL OR TRIM(wemail) = '' THEN
     msg := 'El email no puede estar vacío';
     error_code := 'EMAIL_NULL_EMPTY';
@@ -156,10 +109,8 @@ BEGIN
     RETURN;
   END IF;
   
-  -- 5.2. Limpiar y normalizar (lowercase)
   v_email_clean := LOWER(TRIM(wemail));
   
-  -- 5.3. Validar longitud (según RFC 5321: local 64 + @ + domain 255 = 320 máx)
   IF LENGTH(v_email_clean) < 5 OR LENGTH(v_email_clean) > 320 THEN
     msg := 'El email debe tener entre 5 y 320 caracteres. Recibido: ' || LENGTH(v_email_clean) || ' caracteres';
     error_code := 'EMAIL_INVALID_LENGTH';
@@ -167,7 +118,6 @@ BEGIN
     RETURN;
   END IF;
   
-  -- 5.4. Validar formato (según esquema: '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
   IF v_email_clean !~ '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$' THEN
     msg := 'El email tiene formato inválido. Debe ser usuario@dominio.com';
     error_code := 'EMAIL_INVALID_FORMAT';
@@ -175,7 +125,6 @@ BEGIN
     RETURN;
   END IF;
   
-  -- 5.5. Validar email NO duplicado (UNIQUE constraint)
   SELECT EXISTS(
     SELECT 1 FROM tab_users 
     WHERE email = v_email_clean
@@ -188,11 +137,7 @@ BEGIN
     RETURN;
   END IF;
   
-  -- ==========================================
-  -- 6. VALIDAR PASSWORD HASH
-  -- ==========================================
-  
-  -- 6.1. Validar NULL/vacío
+  -- VALIDAR PASSWORD HASH
   IF wpassword_hash IS NULL OR TRIM(wpassword_hash) = '' THEN
     msg := 'El password hash no puede estar vacío';
     error_code := 'PASSWORD_HASH_NULL_EMPTY';
@@ -200,7 +145,6 @@ BEGIN
     RETURN;
   END IF;
   
-  -- 6.2. Validar longitud (bcrypt hash debe ser exactamente 60 caracteres)
   IF LENGTH(wpassword_hash) != 60 THEN
     msg := 'El password hash debe tener exactamente 60 caracteres (bcrypt). Recibido: ' || LENGTH(wpassword_hash) || ' caracteres';
     error_code := 'PASSWORD_HASH_INVALID_LENGTH';
@@ -208,7 +152,6 @@ BEGIN
     RETURN;
   END IF;
   
-  -- 6.3. Validar formato bcrypt ($2a$, $2b$, $2y$ + 2 dígitos + $ + 53 caracteres)
   IF wpassword_hash !~ '^\$2[ayb]\$[0-9]{2}\$[A-Za-z0-9./]{53}$' THEN
     msg := 'El password hash debe tener formato bcrypt válido ($2a$/$2b$/$2y$ + rounds + salt + hash)';
     error_code := 'PASSWORD_HASH_INVALID_FORMAT';
@@ -216,12 +159,8 @@ BEGIN
     RETURN;
   END IF;
   
-  -- ==========================================
-  -- 7. VALIDAR AVATAR URL (OPCIONAL)
-  -- ==========================================
-  
+  -- VALIDAR AVATAR URL (OPCIONAL)
   IF wavatar_url IS NOT NULL THEN
-    -- 7.1. Validar longitud (según esquema: VARCHAR(500))
     IF LENGTH(wavatar_url) > 500 THEN
       msg := 'La URL del avatar no puede exceder 500 caracteres. Recibido: ' || LENGTH(wavatar_url) || ' caracteres';
       error_code := 'AVATAR_URL_TOO_LONG';
@@ -229,7 +168,6 @@ BEGIN
       RETURN;
     END IF;
     
-    -- 7.2. Validar formato URL básico (http:// o https://)
     IF wavatar_url !~ '^https?://' THEN
       msg := 'La URL del avatar debe comenzar con http:// o https://';
       error_code := 'AVATAR_URL_INVALID_FORMAT';
@@ -238,19 +176,12 @@ BEGIN
     END IF;
   END IF;
   
-  -- ==========================================
-  -- 8. GENERAR ID DE USUARIO (SECUENCIAL)
-  -- ==========================================
-  
-  -- 8.1. Obtener el último ID y sumarle 1 (empezando desde 1 si no hay registros)
+  -- GENERAR ID DE USUARIO (SECUENCIAL)
   SELECT COALESCE(MAX(tab_users.id_user), 0) + 1 INTO v_generated_id FROM tab_users;
   
   RAISE NOTICE '[fun_create_user] ID generado (secuencial): %', v_generated_id;
   
-  -- ==========================================
-  -- 9. VALIDAR ROL PASAJERO EXISTE
-  -- ==========================================
-  
+  -- VALIDAR ROL PASAJERO EXISTE
   SELECT EXISTS(
     SELECT 1 FROM tab_roles 
     WHERE id_role = 1 AND is_active = TRUE
@@ -263,10 +194,7 @@ BEGIN
     RETURN;
   END IF;
   
-  -- ==========================================
-  -- 10. INSERTAR USUARIO EN TAB_USERS
-  -- ==========================================
-  
+  -- INSERTAR USUARIO EN TAB_USERS
   BEGIN
     INSERT INTO tab_users (
       id_user,
@@ -319,10 +247,7 @@ BEGIN
       RETURN;
   END;
   
-  -- ==========================================
-  -- 11. ASIGNAR ROL PASAJERO AUTOMÁTICAMENTE
-  -- ==========================================
-  
+  -- ASIGNAR ROL PASAJERO AUTOMÁTICAMENTE
   BEGIN
     INSERT INTO tab_user_roles (
       id_user,
@@ -357,10 +282,7 @@ BEGIN
       RETURN;
   END;
   
-  -- ==========================================
-  -- 12. RETORNO EXITOSO
-  -- ==========================================
-  
+  -- RETORNO EXITOSO
   success := TRUE;
   msg := 'Usuario creado exitosamente con rol Pasajero';
   error_code := NULL;
@@ -371,166 +293,17 @@ BEGIN
 END;
 $$;
 
--- =============================================
--- COMENTARIOS FINALES
--- =============================================
-
+-- Agregar comentario
 COMMENT ON FUNCTION fun_create_user IS 
-'v3.0 - Crea un nuevo usuario con validaciones completas y asigna automáticamente el rol de Pasajero.
-Genera ID automáticamente de forma SECUENCIAL (MAX(id_user) + 1).
-Inserta en tab_users y tab_user_roles en una transacción atómica.
-Valida: usuario creador, email (formato y unicidad), nombre (longitud y caracteres), password hash (formato bcrypt), avatar URL.
-Retorna: success (BOOLEAN), msg (VARCHAR), error_code (VARCHAR), id_user (INTEGER).
-Códigos de error: USER_CREATE_NOT_FOUND, NAME_NULL_EMPTY, NAME_TOO_SHORT, NAME_TOO_LONG, NAME_INVALID_CHARS, 
-NAME_NO_LETTERS, EMAIL_NULL_EMPTY, EMAIL_INVALID_LENGTH, EMAIL_INVALID_FORMAT, EMAIL_DUPLICATE, 
-PASSWORD_HASH_NULL_EMPTY, PASSWORD_HASH_INVALID_LENGTH, PASSWORD_HASH_INVALID_FORMAT, AVATAR_URL_TOO_LONG, 
-AVATAR_URL_INVALID_FORMAT, ROLE_PASSENGER_NOT_FOUND, USER_INSERT_UNIQUE_VIOLATION, 
-USER_INSERT_NOT_NULL_VIOLATION, USER_INSERT_FK_VIOLATION, USER_INSERT_CHECK_VIOLATION, USER_INSERT_ERROR, 
-USER_ROLE_INSERT_UNIQUE_VIOLATION, USER_ROLE_INSERT_FK_VIOLATION, USER_ROLE_INSERT_ERROR.';
+'v3.0 - Crea usuario con ID secuencial (MAX+1). Valida email, nombre, password hash bcrypt. Asigna rol Pasajero automáticamente.';
 
 -- =============================================
--- EJEMPLOS DE USO
+-- PRUEBA RÁPIDA
 -- =============================================
 
-/*
--- Ejemplo 1: Crear usuario básico (admin con ID 1)
-SELECT * FROM fun_create_user(
-  'juan@example.com',
-  '$2b$10$abc123...',  -- Hash bcrypt real (60 caracteres)
-  'Juan Pérez',
-  1,                    -- user_create (administrador)
-  NULL                  -- Sin avatar
-);
-
--- Resultado exitoso:
--- success | msg                                     | error_code | id_user
--- TRUE    | Usuario creado exitosamente con rol... | NULL       | 2
-
-
--- Ejemplo 2: Crear usuario con avatar
-SELECT * FROM fun_create_user(
-  'maria.garcia@example.com',
-  '$2b$10$xyz789...',
-  'María García',
-  1735689600,           -- Sistema
-  'https://example.com/avatars/maria.jpg'
-);
-
-
--- Ejemplo 3: ERROR - Email duplicado
-SELECT * FROM fun_create_user(
-  'juan@example.com',  -- Ya existe
-  '$2b$10$abc...',
-  'Otro Usuario',
-  1,
-  NULL
-);
-
--- Resultado:
--- success | msg                                  | error_code     | id_user
--- FALSE   | El email ya está registrado: juan... | EMAIL_DUPLICATE | NULL
-
-
--- Ejemplo 4: ERROR - Nombre con caracteres inválidos
-SELECT * FROM fun_create_user(
-  'test@example.com',
-  '$2b$10$abc...',
-  'User@123#',  -- Contiene @ y #
-  1,
-  NULL
-);
-
--- Resultado:
--- success | msg                                     | error_code          | id_user
--- FALSE   | El nombre contiene caracteres no per... | NAME_INVALID_CHARS  | NULL
-
-
--- Ejemplo 5: ERROR - Email inválido
-SELECT * FROM fun_create_user(
-  'email_sin_arroba.com',  -- Falta @
-  '$2b$10$abc...',
-  'Test User',
-  1,
-  NULL
-);
-
--- Resultado:
--- success | msg                        | error_code           | id_user
--- FALSE   | El email tiene formato ... | EMAIL_INVALID_FORMAT | NULL
-
-
--- Ejemplo 6: ERROR - Password hash inválido
-SELECT * FROM fun_create_user(
-  'test@example.com',
-  'password123',  -- No es hash bcrypt (muy corto)
-  'Test User',
-  1,
-  NULL
-);
-
--- Resultado:
--- success | msg                                     | error_code                      | id_user
--- FALSE   | El password hash debe tener exacta... | PASSWORD_HASH_INVALID_LENGTH    | NULL
-
-
--- Ejemplo 7: ERROR - Usuario creador no existe
-SELECT * FROM fun_create_user(
-  'test@example.com',
-  '$2b$10$abc...',
-  'Test User',
-  999999,  -- Usuario inexistente
-  NULL
-);
-
--- Resultado:
--- success | msg                                  | error_code              | id_user
--- FALSE   | El usuario creador no existe o es... | USER_CREATE_NOT_FOUND   | NULL
-
-
--- Ejemplo 8: Crear con nombre con acentos y apóstrofes (válido)
-SELECT * FROM fun_create_user(
-  'jose.oconnor@example.com',
-  '$2b$10$abc...',
-  'José María O''Connor-García',  -- Válido: acentos, apóstrofe, guion
-  1,
-  NULL
-);
-
--- Resultado:
--- success | msg                                     | error_code | id_user
--- TRUE    | Usuario creado exitosamente con rol... | NULL       | 3
-
-
--- Ejemplo 9: ERROR - Avatar URL sin https://
-SELECT * FROM fun_create_user(
-  'test@example.com',
-  '$2b$10$abc...',
-  'Test User',
-  1,
-  'example.com/avatar.jpg'  -- Falta protocolo
-);
-
--- Resultado:
--- success | msg                                  | error_code                 | id_user
--- FALSE   | La URL del avatar debe comenzar ... | AVATAR_URL_INVALID_FORMAT  | NULL
-
-
--- Ejemplo 10: Verificar usuario creado (con JOIN a roles)
-SELECT 
-  u.id_user,
-  u.email,
-  u.full_name,
-  u.avatar_url,
-  r.role_name,
-  u.created_at,
-  u.is_active
-FROM tab_users u
-JOIN tab_user_roles ur ON u.id_user = ur.id_user
-JOIN tab_roles r ON ur.id_role = r.id_role
-WHERE u.email = 'juan@example.com';
-
-*/
+-- Verificar que la función fue creada
+\df fun_create_user
 
 -- =============================================
--- FIN DE LA FUNCIÓN fun_create_user v3.0
+-- FIN DEL DEPLOY
 -- =============================================

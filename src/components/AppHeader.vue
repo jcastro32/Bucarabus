@@ -50,7 +50,33 @@
           <div class="user-avatar">{{ userAvatar }}</div>
           <div class="user-details">
             <span id="current-user">{{ userName }}</span>
-            <span class="user-role">{{ userRole }}</span>
+            
+            <!-- Dropdown de roles si tiene múltiples roles -->
+            <div v-if="hasMultipleRoles" class="role-selector">
+              <button class="current-role-btn" @click="toggleRoleDropdown">
+                <span class="role-text">{{ currentRoleName }}</span>
+                <span class="dropdown-arrow">▼</span>
+              </button>
+              
+              <!-- Dropdown de roles -->
+              <div v-if="showRoleDropdown" class="role-dropdown">
+                <div class="role-dropdown-header">🔄 Cambiar Vista</div>
+                <button
+                  v-for="role in availableRoles"
+                  :key="role.id_role"
+                  @click="handleRoleSwitch(role)"
+                  class="role-option"
+                  :class="{ active: isActiveRole(role) }"
+                >
+                  <span class="role-icon">{{ getRoleIcon(role.id_role) }}</span>
+                  <span class="role-name">{{ role.role_name || getRoleNameById(role.id_role) }}</span>
+                  <span v-if="isActiveRole(role)" class="active-badge">✔</span>
+                </button>
+              </div>
+            </div>
+            
+            <!-- Rol simple si solo tiene uno -->
+            <span v-else class="user-role">{{ userRole }}</span>
           </div>
           <button id="logout-btn" class="logout-btn" @click="handleLogout">
             🚪 Salir
@@ -62,7 +88,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { useAuthStore } from '../stores/auth'
@@ -77,6 +103,7 @@ const routesStore = useRoutesStore()
 
 // Estado local
 const searchQuery = ref('')
+const showRoleDropdown = ref(false)
 
 // Getters computados - Usuario
 const userName = computed(() => authStore.userName)
@@ -91,6 +118,12 @@ const userRole = computed(() => {
   return roleNames[role] || role
 })
 const userAvatar = computed(() => authStore.userAvatar)
+const hasMultipleRoles = computed(() => authStore.hasMultipleRoles)
+const availableRoles = computed(() => authStore.availableRoles)
+const currentRoleName = computed(() => {
+  const role = authStore.userRole
+  return authStore.getRoleName(role)
+})
 
 // Getters computados - Stats
 const activeBusesCount = computed(() => {
@@ -128,6 +161,76 @@ const handleLogout = async () => {
     router.push('/login')
   }
 }
+
+const toggleRoleDropdown = () => {
+  showRoleDropdown.value = !showRoleDropdown.value
+}
+
+const isActiveRole = (role) => {
+  const roleKey = authStore.roleIdToKey(role.id_role)
+  return roleKey === authStore.userRole
+}
+
+const handleRoleSwitch = async (role) => {
+  const roleKey = authStore.roleIdToKey(role.id_role)
+  
+  // Cambiar rol en el store
+  const result = authStore.switchRole(roleKey)
+  
+  if (result.success) {
+    showRoleDropdown.value = false
+    
+    // Redirigir según el nuevo rol
+    let redirectPath = '/monitor' // Default
+    if (roleKey === 'driver') {
+      redirectPath = '/conductor'
+    } else if (roleKey === 'passenger') {
+      redirectPath = '/pasajero'
+    } else if (roleKey === 'supervisor' || roleKey === 'admin') {
+      redirectPath = '/monitor'
+    }
+    
+    console.log(`🔄 Cambiando a rol ${roleKey}, redirigiendo a ${redirectPath}`)
+    router.push(redirectPath)
+  }
+}
+
+const getRoleIcon = (id_role) => {
+  const icons = {
+    4: '👨‍💼', // Admin
+    3: '👨‍🏫', // Supervisor
+    2: '👨‍✈️', // Conductor
+    1: '👤'  // Pasajero
+  }
+  return icons[id_role] || '👤'
+}
+
+const getRoleNameById = (id_role) => {
+  const names = {
+    4: 'Administrador',
+    3: 'Supervisor',
+    2: 'Conductor',
+    1: 'Pasajero'
+  }
+  return names[id_role] || 'Usuario'
+}
+
+// Cerrar dropdown al hacer click fuera
+const handleClickOutside = (event) => {
+  const roleSelector = document.querySelector('.role-selector')
+  if (roleSelector && !roleSelector.contains(event.target)) {
+    showRoleDropdown.value = false
+  }
+}
+
+// Agregar listener para cerrar dropdown
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
 </script>
 
 <style scoped>
@@ -363,6 +466,119 @@ const handleLogout = async () => {
   font-size: 11px !important;
   opacity: 0.8;
   font-weight: 400 !important;
+}
+
+/* Role Selector Dropdown */
+.role-selector {
+  position: relative;
+}
+
+.current-role-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.current-role-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.02);
+}
+
+.role-text {
+  opacity: 0.9;
+}
+
+.dropdown-arrow {
+  font-size: 8px;
+  opacity: 0.7;
+  transition: transform 0.2s;
+}
+
+.role-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  min-width: 200px;
+  z-index: 1000;
+  overflow: hidden;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.role-dropdown-header {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  padding: 10px 15px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.role-option {
+  width: 100%;
+  background: white;
+  border: none;
+  padding: 12px 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid #f0f0f0;
+  color: #1e293b;
+  font-size: 13px;
+}
+
+.role-option:last-child {
+  border-bottom: none;
+}
+
+.role-option:hover {
+  background: #f8fafc;
+}
+
+.role-option.active {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+  border-left: 3px solid #667eea;
+}
+
+.role-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.role-name {
+  flex: 1;
+  text-align: left;
+  font-weight: 500;
+}
+
+.active-badge {
+  color: #10b981;
+  font-size: 12px;
+  font-weight: bold;
 }
 
 .logout-btn {

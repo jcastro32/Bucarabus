@@ -92,7 +92,7 @@
           <div class="cards-grid" @click.stop>
             <div 
               v-for="route in filteredRoutes" 
-              :key="route.storeId"
+              :key="route.id"
               class="route-card"
               :style="{ borderLeftColor: route.color }"
             >
@@ -101,11 +101,11 @@
                   <h5 v-html="highlightText(route.name)"></h5>
                   <button 
                     class="toggle-route-visibility"
-                    :class="{ 'route-visible': isRouteVisible(route.storeId) }"
+                    :class="{ 'route-visible': isRouteVisible(route.id) }"
                     @click="toggleRouteVisibility(route)"
-                    :title="isRouteVisible(route.storeId) ? 'Ocultar ruta en el mapa' : 'Mostrar ruta en el mapa'"
+                    :title="isRouteVisible(route.id) ? 'Ocultar ruta en el mapa' : 'Mostrar ruta en el mapa'"
                   >
-                    {{ isRouteVisible(route.storeId) ? '👁️' : '👁️‍🗨️' }}
+                    {{ isRouteVisible(route.id) ? '👁️' : '👁️‍🗨️' }}
                   </button>
                 </div>
                 <span class="status-badge online">EN LÍNEA</span>
@@ -174,10 +174,10 @@
               </div>
 
               <div class="card-actions">
-                <button class="card-action-btn" @click="focusRoute(route.storeId, route.path, route.color, route.name)">
+                <button class="card-action-btn" @click="focusRoute(route.id, route.path, route.color, route.name)">
                   📍 Ver en Mapa
                 </button>
-                <button class="card-action-btn" @click="viewRouteDetails(route.storeId)">
+                <button class="card-action-btn" @click="viewRouteDetails(route.id)">
                   📊 Detalles
                 </button>
               </div>
@@ -235,17 +235,12 @@ const toggleCollapse = () => {
   isCollapsed.value = !isCollapsed.value
 }
 
-// Función auxiliar para convertir id numérico a formato RUTA_XX
-const formatRouteId = (numericId) => {
-  return `RUTA_${String(numericId).padStart(2, '0')}`
-}
-
 // Mostrar/ocultar todas las rutas activas
 const toggleAllRoutes = () => {
   if (allRoutesVisible.value) {
     // Ocultar todas
     activeRoutesData.value.forEach(route => {
-      routesStore.deactivateRoute(route.storeId)
+      routesStore.deactivateRoute(route.id)
     })
     allRoutesVisible.value = false
     console.log('👁️ Todas las rutas ocultas')
@@ -258,13 +253,13 @@ const toggleAllRoutes = () => {
 // Mostrar todas las rutas activas en el mapa
 const showAllActiveRoutes = () => {
   activeRoutesData.value.forEach(route => {
-    // Activar ruta en el store usando el ID formateado
-    routesStore.activateRoute(route.storeId)
+    // Activar ruta en el store usando el ID numérico
+    routesStore.activateRoute(route.id)
     
     // Si la ruta no existe en el store, agregarla temporalmente con su path
-    if (!routesStore.routes[route.storeId] && route.path) {
-      routesStore.routes[route.storeId] = {
-        id: route.storeId,
+    if (!routesStore.routes[route.id] && route.path) {
+      routesStore.routes[route.id] = {
+        id: route.id,
         name: route.name,
         color: route.color,
         path: route.path,
@@ -415,7 +410,7 @@ const isRouteVisible = (routeId) => {
 
 // Toggle visibilidad de ruta en el mapa
 const toggleRouteVisibility = (route) => {
-  const routeId = route.storeId
+  const routeId = route.id
   
   // Agregar al store si no existe
   if (!routesStore.routes[routeId] && route.path) {
@@ -454,7 +449,6 @@ const loadActiveRoutes = async () => {
     
     shifts.forEach(shift => {
       const routeId = Number(shift.id_route)
-      const storeId = formatRouteId(routeId)
       
       if (!routesMap.has(routeId)) {
         // Parsear el path de GeoJSON a formato Leaflet [lat, lng]
@@ -466,7 +460,6 @@ const loadActiveRoutes = async () => {
         
         routesMap.set(routeId, {
           id: routeId,
-          storeId: storeId,  // ID formateado para el store
           name: shift.name_route,
           color: shift.color_route || '#667eea',
           path: pathCoords,  // Path para dibujar en el mapa

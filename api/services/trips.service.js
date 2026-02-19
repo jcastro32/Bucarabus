@@ -1,5 +1,7 @@
 import pool from '../config/database.js';
 
+const SYSTEM_USER_ID = 1;
+
 /**
  * Crear un viaje individual
  */
@@ -44,7 +46,9 @@ export async function getTripsByRouteAndDate(id_route, trip_date) {
        created_at,
        user_create
      FROM tab_trips
-     WHERE id_route = $1 AND trip_date = $2
+     WHERE id_route = $1 
+       AND trip_date = $2
+       AND status_trip != 'cancelled'
      ORDER BY start_time`,
     [id_route, trip_date]
   );
@@ -120,10 +124,10 @@ export async function setTripBus(id_trip, plate_number, user_update) {
 /**
  * Eliminar viaje
  */
-export async function deleteTrip(id_trip) {
+export async function deleteTrip(id_trip, user_delete = SYSTEM_USER_ID) {
   const result = await pool.query(
-    `SELECT * FROM fun_delete_trip($1)`,
-    [id_trip]
+    `SELECT * FROM fun_delete_trip($1, $2)`,
+    [id_trip, user_delete]
   );
   
   return result.rows[0];

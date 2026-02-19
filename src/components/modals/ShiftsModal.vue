@@ -234,7 +234,9 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { useDriversStore } from '../../stores/drivers'
 import { useBusesStore } from '../../stores/buses'
 import { useRoutesStore } from '../../stores/routes'
-import { createTripsBatch, getTripsByRouteAndDate, deleteTripsByDate, updateTrip } from '../../api/trips'
+import { useTripsStore } from '../../stores/trips'
+import { updateTrip, deleteTrip as deleteTripAPI } from '../../api/trips'
+import { SYSTEM_USER_ID } from '../../constants/system'
 
 const props = defineProps({
   isOpen: {
@@ -256,9 +258,11 @@ const emit = defineEmits(['close', 'save'])
 const driversStore = useDriversStore()
 const busesStore = useBusesStore()
 const routesStore = useRoutesStore()
+const tripsStore = useTripsStore()
 
 // Estado reactivo
 const trips = ref([])
+const deletedTripIds = ref([])  // IDs de viajes eliminados (de BD)
 const isSaving = ref(false)
 const saveError = ref(null)
 let draggedBusId = null
@@ -286,6 +290,7 @@ watch(() => props.isOpen, async (newVal) => {
   if (newVal) {
     // Limpiar viajes anteriores al abrir el modal
     trips.value = []
+    deletedTripIds.value = []  // Limpiar IDs de viajes eliminados
     // No esperar a loadData para no bloquear la renderización del modal
     loadData().catch(error => {
       console.error('Error en loadData:', error)
@@ -341,18 +346,17 @@ const loadExistingTrips = async () => {
       ? props.initialDate.split('T')[0]
       : props.initialDate.toISOString().split('T')[0]
     
-    // Obtener el ID numérico de la ruta
-    const route = routesStore.routesList.find(r => r.id === props.initialRouteId)
-    const numericRouteId = route?.id_route
+    // initialRouteId ahora es numérico, usarlo directamente
+    const numericRouteId = props.initialRouteId
     
     if (!numericRouteId) {
-      console.log('⚠️ No se encontró el ID numérico de la ruta:', props.initialRouteId)
+      console.log('⚠️ No se recibió ID de ruta:', props.initialRouteId)
       return
     }
     
     console.log(`🔍 Buscando viajes para ruta ${numericRouteId} en fecha ${tripDate}`)
     
-    const existingTrips = await getTripsByRouteAndDate(numericRouteId, tripDate)
+    const existingTrips = await tripsStore.fetchTripsByRouteAndDate(numericRouteId, tripDate)
     
     console.log('🔍 Viajes recibidos de BD:', existingTrips)
     
@@ -363,7 +367,7 @@ const loadExistingTrips = async () => {
         return {
           id: trip.id_trip,
           tripNumber: index + 1,
-          routeId: props.initialRouteId,  // Usar el formato del frontend "RUTA_XX"
+          routeId: props.initialRouteId,  // ID numérico de la ruta
           busId: trip.plate_number || null,
           startTime: trip.start_time.substring(0, 5),  // "08:30:00" -> "08:30"
           endTime: trip.end_time.substring(0, 5),
@@ -1040,6 +1044,12 @@ const createNewTrip = (templateTrip, previousTrip = null, nextTrip = null, posit
 const deleteTrip = (trip) => {
   const index = trips.value.findIndex(t => t.id === trip.id)
   if (index !== -1) {
+    // Si el viaje vino de la BD, agregarlo a la lista de eliminados
+    if (trip.fromDatabase && trip.id) {
+      deletedTripIds.value.push(trip.id)
+      console.log(`🗑️ Viaje ${trip.id} marcado para eliminación`)
+    }
+    
     if (trip.busId) {
       setBusAvailability(trip.busId, true)
     }
@@ -1077,24 +1087,25 @@ const saveSchedule = async () => {
       tripDate = new Date().toISOString().split('T')[0]
     }
     
-    // Obtener ID numérico de la ruta
-    const route = routesList.value.find(r => r.id === routeId)
-    const numericRouteId = route?.id_route
+    // El routeId ahora es directamente numérico
+    const numericRouteId = routeId
     
     if (!numericRouteId) {
-      alert(`❌ Error: No se encontró el ID numérico de la ruta.`)
+      alert(`❌ Error: No se recibió ID de ruta válido.`)
       isSaving.value = false
       return
     }
     
-    // Separar viajes: modificados de BD vs nuevos
+    // Separar viajes: modificados de BD vs nuevos vs eliminados
     const modifiedTrips = filteredTrips.value.filter(trip => trip.fromDatabase && trip.modified)
     const newTrips = filteredTrips.value.filter(trip => !trip.fromDatabase)
+    const deletedIds = deletedTripIds.value
     
-    console.log(`📤 Guardando: ${modifiedTrips.length} modificados, ${newTrips.length} nuevos`)
+    console.log(`📤 Guardando: ${modifiedTrips.length} modificados, ${newTrips.length} nuevos, ${deletedIds.length} eliminados`)
     
     let updatedCount = 0
     let createdCount = 0
+    let deletedCount = 0
     let errors = []
     
     // 1. Actualizar solo viajes que fueron modificados
@@ -1107,7 +1118,7 @@ const saveSchedule = async () => {
           // NOTA: Para desasignar bus, enviar '' (string vacío), no null
           // porque el stored procedure interpreta null como "no cambiar"
           const updateData = {
-            user_update: 'admin',
+            user_update: SYSTEM_USER_ID,
             start_time: trip.startTime + ':00',
             end_time: trip.endTime + ':00',
             plate_number: trip.busId || ''  // String vacío para desasignar
@@ -1133,7 +1144,32 @@ const saveSchedule = async () => {
       }
     }
     
-    // 2. Crear viajes nuevos
+    // 2. Eliminar viajes marcados para eliminación
+    if (deletedIds.length > 0) {
+      console.log('🗑️ Eliminando viajes...')
+      
+      for (const tripId of deletedIds) {
+        try {
+          const result = await deleteTripAPI(tripId)
+          if (result.success) {
+            deletedCount++
+            console.log(`✅ Viaje ${tripId} eliminado`)
+          } else {
+            console.warn(`⚠️ No se pudo eliminar viaje ${tripId}: ${result.msg}`)
+            errors.push(`Eliminación de viaje ${tripId}: ${result.msg}`)
+          }
+        } catch (error) {
+          const errorMsg = error.response?.data?.msg || error.message
+          console.error(`Error eliminando viaje ${tripId}:`, error.response?.data || error)
+          errors.push(`Error eliminando viaje ${tripId}: ${errorMsg}`)
+        }
+      }
+      
+      // Limpiar array de eliminados después de procesarlos
+      deletedTripIds.value = []
+    }
+    
+    // 3. Crear viajes nuevos
     if (newTrips.length > 0) {
       console.log('➕ Creando viajes nuevos...')
       
@@ -1143,11 +1179,11 @@ const saveSchedule = async () => {
         plate_number: trip.busId || null
       }))
 
-      const result = await createTripsBatch({
+      const result = await tripsStore.createTripsBatch({
         id_route: numericRouteId,
         trip_date: tripDate,
         trips: tripsToCreate,
-        user_create: 'admin'
+        user_create: SYSTEM_USER_ID
       })
 
       if (result.success) {
@@ -1161,12 +1197,21 @@ const saveSchedule = async () => {
     if (errors.length === 0) {
       let msg = '✅ Horario guardado exitosamente\n'
       if (updatedCount > 0) msg += `• ${updatedCount} viajes actualizados\n`
+      if (deletedCount > 0) msg += `• ${deletedCount} viajes eliminados\n`
       if (createdCount > 0) msg += `• ${createdCount} viajes creados`
+      
+      // Invalidar caché para que se recarguen los datos actualizados
+      tripsStore.invalidateCache(numericRouteId, tripDate)
+      
       alert(msg)
       emit('save', { date: tripDate, routeId: selectedRouteId.value })
       closeModal()
     } else {
-      alert(`⚠️ Guardado parcial:\n• ${updatedCount} actualizados\n• ${createdCount} creados\n\nErrores:\n${errors.join('\n')}`)
+      // Invalidar caché también en caso de errores parciales
+      // porque algunos cambios sí se aplicaron
+      tripsStore.invalidateCache(numericRouteId, tripDate)
+      
+      alert(`⚠️ Guardado parcial:\n• ${updatedCount} actualizados\n• ${deletedCount} eliminados\n• ${createdCount} creados\n\nErrores:\n${errors.join('\n')}`)
     }
     
   } catch (error) {

@@ -1,6 +1,7 @@
 import express from 'express'
 import driversService from '../services/drivers.service.js'
 
+const SYSTEM_USER_ID = 1;
 const router = express.Router()
 
 /**
@@ -104,7 +105,7 @@ router.post('/', async (req, res) => {
       license_exp,
       avatar_url: photo_driver || null,
       address_driver: address_driver || null,
-      user_create: user || 'admin'
+      user_create: user || SYSTEM_USER_ID
     });
     
     if (!result.success) {
@@ -134,7 +135,7 @@ router.put('/:id', async (req, res) => {
     
     const result = await driversService.updateDriver(id, {
       ...req.body,
-      user_update: user || 'admin'
+      user_update: user || SYSTEM_USER_ID
     });
     
     if (!result.success) {

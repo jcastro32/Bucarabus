@@ -1,5 +1,7 @@
 import pool from '../config/database.js'
 
+const SYSTEM_USER_ID = 1;
+
 /**
  * 🗺️ Servicio de Rutas - Usa Procedimientos Almacenados
  * El backend solo hace llamadas a los SPs de PostgreSQL
@@ -32,8 +34,8 @@ class RoutesService {
       
       // Transformar al formato del frontend
       return result.rows.map(row => ({
-        id: `RUTA_${String(row.id_route).padStart(2, '0')}`,
-        id_route: row.id_route,  // ID numérico para operaciones de BD
+        id: row.id_route,  // ID numérico único
+        code: `RUTA_${String(row.id_route).padStart(2, '0')}`,  // Código para display
         name: row.name_route,
         path: row.path_route?.coordinates || [],
         description: row.descrip_route || '',
@@ -59,7 +61,7 @@ class RoutesService {
    * Obtener ruta por ID
    */
   async getRouteById(id) {
-    const routeId = parseInt(id.replace('RUTA_', ''))
+    const routeId = Number(id)  // ID ya es numérico, solo asegurar tipo
     
     try {
       const result = await pool.query(`
@@ -87,8 +89,8 @@ class RoutesService {
       const row = result.rows[0]
       
       return {
-        id: `RUTA_${String(row.id_route).padStart(2, '0')}`,
-        id_route: row.id_route,
+        id: row.id_route,
+        code: `RUTA_${String(row.id_route).padStart(2, '0')}`,
         name: row.name_route,
         path: row.path_route?.coordinates || [],
         description: row.descrip_route || '',
@@ -135,9 +137,9 @@ class RoutesService {
         [
           name,
           lineStringWKT,
+          user || SYSTEM_USER_ID,
           description || '',
-          color || null,  // Enviar null para que use color automático de la paleta
-          user || 'system'
+          color || null  // Enviar null para que use color automático de la paleta
         ]
       )
       
@@ -154,8 +156,8 @@ class RoutesService {
       const routeDetails = response.route_data
       
       return {
-        id: `RUTA_${String(response.route_id).padStart(2, '0')}`,
-        id_route: response.route_id,
+        id: response.route_id,
+        code: `RUTA_${String(response.route_id).padStart(2, '0')}`,
         name: routeDetails.name_route,
         path: routeDetails.path_route?.coordinates || [],
         description: routeDetails.descrip_route || '',
@@ -183,7 +185,7 @@ class RoutesService {
    * Actualizar ruta existente (solo metadatos: nombre, color, descripción)
    */
   async updateRoute(id, routeData) {
-    const routeId = parseInt(id.replace('RUTA_', ''))
+    const routeId = Number(id)
     const { name, color, description, user } = routeData
     
     try {
@@ -191,10 +193,10 @@ class RoutesService {
         'SELECT * FROM fun_update_route($1, $2, $3, $4, $5)',
         [
           routeId,
+          user || SYSTEM_USER_ID,
           name || null,
           description || null,
-          color || null,
-          user || 'system'
+          color || null
         ]
       )
       
@@ -211,8 +213,8 @@ class RoutesService {
       const routeDetails = response.route_data
       
       return {
-        id: `RUTA_${String(routeDetails.id_route).padStart(2, '0')}`,
-        id_route: routeDetails.id_route,
+        id: routeDetails.id_route,
+        code: `RUTA_${String(routeDetails.id_route).padStart(2, '0')}`,
         name: routeDetails.name_route,
         path: routeDetails.path_route?.coordinates || [],
         description: routeDetails.descrip_route || '',
@@ -241,12 +243,12 @@ class RoutesService {
    * Eliminar ruta (soft delete)
    */
   async deleteRoute(id, user) {
-    const routeId = parseInt(id.replace('RUTA_', ''))
+    const routeId = Number(id)
     
     try {
       const result = await pool.query(
         'SELECT * FROM fun_delete_route($1, $2)',
-        [routeId, user || 'system']
+        [routeId, user || SYSTEM_USER_ID]
       )
       
       const response = result.rows[0]
@@ -293,7 +295,8 @@ class RoutesService {
       `, [`%${searchTerm}%`])
       
       return result.rows.map(row => ({
-        id: `RUTA_${String(row.id_route).padStart(2, '0')}`,
+        id: row.id_route,
+        code: `RUTA_${String(row.id_route).padStart(2, '0')}`,
         name: row.name_route,
         path: row.path_route?.coordinates || [],
         description: row.descrip_route || '',
@@ -313,7 +316,7 @@ class RoutesService {
    * Calcular distancia de ruta
    */
   async getRouteDistance(id) {
-    const routeId = parseInt(id.replace('RUTA_', ''))
+    const routeId = Number(id)
     
     try {
       const result = await pool.query(`
@@ -330,7 +333,8 @@ class RoutesService {
       }
       
       return {
-        id: `RUTA_${String(result.rows[0].id_route).padStart(2, '0')}`,
+        id: result.rows[0].id_route,
+        code: `RUTA_${String(result.rows[0].id_route).padStart(2, '0')}`,
         name: result.rows[0].name_route,
         distance_km: result.rows[0].distance_km
       }
@@ -344,7 +348,7 @@ class RoutesService {
    * Obtener viajes de una ruta
    */
   async getRouteTrips(id) {
-    const routeId = parseInt(id.replace('RUTA_', ''))
+    const routeId = Number(id)
     
     try {
       const result = await pool.query(`
@@ -374,7 +378,7 @@ class RoutesService {
    * Obtener estadísticas de una ruta
    */
   async getRouteStats(id) {
-    const routeId = parseInt(id.replace('RUTA_', ''))
+    const routeId = Number(id)
     
     try {
       const result = await pool.query(`
@@ -398,7 +402,8 @@ class RoutesService {
       const row = result.rows[0]
       
       return {
-        id: `RUTA_${String(row.id_route).padStart(2, '0')}`,
+        id: row.id_route,
+        code: `RUTA_${String(row.id_route).padStart(2, '0')}`,
         name: row.name_route,
         distance_km: parseFloat(row.distance_km) || 0,
         total_trips: parseInt(row.total_trips) || 0,
@@ -415,7 +420,7 @@ class RoutesService {
    * Alternar visibilidad (solo frontend, no BD)
    */
   async toggleVisibility(id) {
-    const routeId = parseInt(id.replace('RUTA_', ''))
+    const routeId = Number(id)
     
     try {
       const result = await pool.query(
@@ -428,7 +433,8 @@ class RoutesService {
       }
       
       return {
-        id: `RUTA_${String(result.rows[0].id_route).padStart(2, '0')}`,
+        id: result.rows[0].id_route,
+        code: `RUTA_${String(result.rows[0].id_route).padStart(2, '0')}`,
         visible: true
       }
     } catch (error) {

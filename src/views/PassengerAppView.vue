@@ -9,9 +9,56 @@
           <span class="status-dot"></span>
         </div>
       </div>
-      <button @click="centerOnUser" class="btn-locate" :disabled="!userLocation">
-        📍
-      </button>
+      
+      <div class="header-right">
+        <button @click="centerOnUser" class="btn-locate" :disabled="!userLocation">
+          📍
+        </button>
+        
+        <!-- User Menu -->
+        <div class="user-menu-container" v-if="authStore.isAuthenticated">
+          <button class="user-menu-btn" @click="showUserMenu = !showUserMenu">
+            <span class="user-avatar">{{ authStore.userAvatar }}</span>
+            <span class="user-name">{{ authStore.userName }}</span>
+            <span class="menu-arrow">▼</span>
+          </button>
+          
+          <!-- Dropdown Menu -->
+          <div v-if="showUserMenu" class="user-dropdown">
+            <!-- User Info -->
+            <div class="dropdown-header">
+              <div class="dropdown-avatar">{{ authStore.userAvatar }}</div>
+              <div class="dropdown-info">
+                <div class="dropdown-name">{{ authStore.userName }}</div>
+                <div class="dropdown-role">{{ authStore.getRoleName(authStore.userRole) }}</div>
+              </div>
+            </div>
+            
+            <!-- Role Switcher (if multiple roles) -->
+            <div v-if="authStore.hasMultipleRoles" class="dropdown-section">
+              <div class="section-title">🔄 Cambiar rol</div>
+              <button
+                v-for="role in authStore.availableRoles"
+                :key="role.id_role"
+                @click="handleRoleSwitch(role)"
+                class="role-option"
+                :class="{ active: isActiveRole(role) }"
+              >
+                <span class="role-icon">{{ getRoleIcon(role.id_role) }}</span>
+                <span class="role-name">{{ role.role_name || getRoleNameById(role.id_role) }}</span>
+                <span v-if="isActiveRole(role)" class="active-check">✓</span>
+              </button>
+            </div>
+            
+            <!-- Logout -->
+            <div class="dropdown-section">
+              <button @click="handleLogout" class="btn-logout">
+                <span>🚪</span> Cerrar sesión
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </header>
 
     <!-- Destination Search -->
@@ -247,8 +294,13 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 import { io } from 'socket.io-client'
 import L from 'leaflet'
+
+const router = useRouter()
+const authStore = useAuthStore()
 
 // ============================================
 // CONFIG
@@ -294,6 +346,9 @@ const socket = ref(null)
 
 // Panel visibility
 const panelHidden = ref(false)
+
+// User menu
+const showUserMenu = ref(false)
 
 // Destination search
 const searchQuery = ref('')
@@ -850,9 +905,9 @@ const loadRoutes = async () => {
     
     if (data.success) {
       routes.value = data.data.map(r => ({
-        id: r.id || r.id_route,
-        name: r.name || r.name_route || `Ruta ${r.id || r.id_route}`,
-        color: r.color || r.color_route || '#667eea',
+        id: r.id,
+        name: r.name || `Ruta ${r.id}`,
+        color: r.color || '#667eea',
         path: r.path || r.path_route?.coordinates || []
       }))
 
@@ -1215,6 +1270,65 @@ const clearDestination = () => {
 }
 
 // ============================================
+// USER MENU & AUTH
+// ============================================
+const handleRoleSwitch = (role) => {
+  const roleKey = authStore.roleIdToKey(role.id_role)
+  const result = authStore.switchRole(roleKey)
+  
+  if (result.success) {
+    showUserMenu.value = false
+    
+    // Redirect based on new role
+    let redirectPath = '/monitor'
+    if (roleKey === 'driver') redirectPath = '/conductor'
+    else if (roleKey === 'passenger') redirectPath = '/pasajero'
+    else if (roleKey === 'supervisor' || roleKey === 'admin') redirectPath = '/monitor'
+    
+    router.push(redirectPath)
+  }
+}
+
+const isActiveRole = (role) => {
+  return authStore.roleIdToKey(role.id_role) === authStore.userRole
+}
+
+const getRoleIcon = (roleId) => {
+  const icons = {
+    4: '👨‍💼', // Admin
+    3: '👨‍🏫', // Supervisor
+    2: '👨‍✈️', // Driver
+    1: '👤'   // Passenger
+  }
+  return icons[roleId] || '👤'
+}
+
+const getRoleNameById = (roleId) => {
+  const names = {
+    4: 'Administrador',
+    3: 'Supervisor',
+    2: 'Conductor',
+    1: 'Pasajero'
+  }
+  return names[roleId] || 'Usuario'
+}
+
+const handleLogout = async () => {
+  if (confirm('¿Cerrar sesión?')) {
+    authStore.logout()
+    router.push('/login')
+  }
+}
+
+// Close user menu when clicking outside
+const handleClickOutside = (event) => {
+  const userMenu = event.target.closest('.user-menu-container')
+  if (!userMenu) {
+    showUserMenu.value = false
+  }
+}
+
+// ============================================
 // WATCHERS
 // ============================================
 // Recalcular rutas sugeridas cuando cambia ubicación o hay nuevos buses
@@ -1233,6 +1347,9 @@ onMounted(async () => {
   await loadActiveShifts()
   connectWebSocket()
   requestLocation()
+  
+  // Click outside to close user menu
+  document.addEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {
@@ -1246,6 +1363,9 @@ onUnmounted(() => {
     leafletMap.remove()
     leafletMap = null
   }
+  
+  // Remove event listener
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -1331,6 +1451,197 @@ onUnmounted(() => {
 
 .btn-locate:disabled {
   opacity: 0.5;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* User Menu */
+.user-menu-container {
+  position: relative;
+}
+
+.user-menu-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.user-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.user-avatar {
+  font-size: 1.2rem;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-arrow {
+  font-size: 0.7rem;
+  margin-left: 2px;
+}
+
+/* Dropdown */
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  min-width: 240px;
+  overflow: hidden;
+  z-index: 2000;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.dropdown-avatar {
+  font-size: 2rem;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+}
+
+.dropdown-info {
+  flex: 1;
+}
+
+.dropdown-name {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 2px;
+}
+
+.dropdown-role {
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
+/* Dropdown Sections */
+.dropdown-section {
+  padding: 8px 0;
+  border-top: 1px solid #eee;
+}
+
+.dropdown-section:first-child {
+  border-top: none;
+}
+
+.section-title {
+  padding: 8px 16px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Role Options */
+.role-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: white;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s;
+  color: #333;
+}
+
+.role-option:hover {
+  background: #f5f7fa;
+}
+
+.role-option.active {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+  border-left: 3px solid #667eea;
+}
+
+.role-icon {
+  font-size: 1.3rem;
+  width: 28px;
+  text-align: center;
+}
+
+.role-name {
+  flex: 1;
+  font-size: 0.95rem;
+}
+
+.active-check {
+  color: #667eea;
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+/* Logout Button */
+.btn-logout {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: white;
+  border: none;
+  color: #f44336;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-logout:hover {
+  background: #ffebee;
 }
 
 /* ============================================

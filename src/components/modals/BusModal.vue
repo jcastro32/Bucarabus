@@ -57,8 +57,8 @@
               type="text"
               id="amb_code"
               v-model="formData.amb_code"
-              placeholder="AMB-001"
-              maxlength="7"
+              placeholder="AMB-0001"
+              maxlength="8"
               required
               :class="{ 'error': errors.amb_code }"
             />
@@ -460,6 +460,8 @@ const validateForm = () => {
   // Validar código AMB
   if (!formData.value.amb_code?.trim()) {
     errors.value.amb_code = 'El código AMB es obligatorio'
+  } else if (!/^AMB-[0-9]{4}$/.test(formData.value.amb_code)) {
+    errors.value.amb_code = 'Formato inválido. Debe ser AMB-#### con 4 dígitos (ej: AMB-0001)'
   }
 
   // Validar capacidad

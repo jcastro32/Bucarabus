@@ -53,9 +53,9 @@ const routesStore = useRoutesStore()
 
 // Estado local
 const routesPerformance = ref([
-  { id: 'RUTA_01', name: 'Ruta Centro', performance: 87 },
-  { id: 'RUTA_02', name: 'Ruta Norte', performance: 92 },
-  { id: 'RUTA_03', name: 'Ruta Sur', performance: 78 }
+  { id: 1, name: 'Ruta Centro', performance: 87 },
+  { id: 2, name: 'Ruta Norte', performance: 92 },
+  { id: 3, name: 'Ruta Sur', performance: 78 }
 ])
 </script>
 

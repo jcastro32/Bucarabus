@@ -64,6 +64,14 @@
 
     <!-- Tabla de Turnos por Ruta y Fecha -->
     <section class="shifts-table-section">
+      <!-- Indicador de carga -->
+      <div v-if="tripsStore.loading" class="loading-overlay">
+        <div class="loading-spinner">
+          <div class="spinner"></div>
+          <p>Cargando turnos...</p>
+        </div>
+      </div>
+      
       <div class="table-container">
         <table class="shifts-table">
           <thead>
@@ -163,11 +171,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoutesStore } from '../stores/routes'
+import { useTripsStore } from '../stores/trips'
 import ShiftsModal from '../components/modals/ShiftsModal.vue'
 
 const routesStore = useRoutesStore()
+const tripsStore = useTripsStore()
 
 console.log('🎯 ShiftsView component initialized')
 
@@ -178,9 +188,6 @@ const selectedDate = ref(null)
 
 // Estado de la semana actual
 const currentWeekStart = ref(getMonday(new Date()))
-
-// Datos de turnos (simulados - en producción vendría de la API)
-const shiftsData = ref([])
 
 // Computed
 const routesList = computed(() => routesStore.routesList)
@@ -228,33 +235,50 @@ const weekRangeLabel = computed(() => {
   }
 })
 
-const totalShifts = computed(() => {
-  return shiftsData.value.reduce((sum, s) => sum + s.total, 0)
+// Computed para estadísticas usando el store de trips
+const weekStats = computed(() => {
+  if (!routesList.value.length || !weekDays.value.length) {
+    return { total: 0, assigned: 0, pending: 0, byRoute: {} }
+  }
+  
+  const dates = weekDays.value.map(d => d.dateStr)
+  const stats = tripsStore.getStatsForWeek(routesList.value, dates)
+  return stats
 })
 
-const assignedShifts = computed(() => {
-  return shiftsData.value.reduce((sum, s) => sum + s.assigned, 0)
-})
-
-const pendingShifts = computed(() => {
-  return totalShifts.value - assignedShifts.value
-})
-
+const totalShifts = computed(() => weekStats.value.total)
+const assignedShifts = computed(() => weekStats.value.assigned)
+const pendingShifts = computed(() => weekStats.value.pending)
 const activeRoutes = computed(() => {
-  const routeIds = new Set(shiftsData.value.map(s => s.routeId))
-  return routeIds.size
+  return Object.keys(weekStats.value.byRoute || {}).filter(routeId => {
+    return weekStats.value.byRoute[routeId].total > 0
+  }).length
 })
 
 const recentShifts = computed(() => {
-  return shiftsData.value
-    .map(shift => {
-      const route = routesList.value.find(r => r.id === shift.routeId)
-      return {
-        ...shift,
-        routeName: route?.name || 'Ruta desconocida',
-        routeColor: route?.color
+  const shifts = []
+  const stats = weekStats.value.byRoute || {}
+  
+  Object.entries(stats).forEach(([routeId, routeStats]) => {
+    Object.entries(routeStats.byDate || {}).forEach(([date, dateStats]) => {
+      if (dateStats.total > 0) {
+        // routeId ahora es numérico (ej: 1, 2, 3)
+        const route = routesList.value.find(r => r.id == routeId)
+        shifts.push({
+          id: `${routeId}-${date}`,
+          routeId: routeId, // ID numérico de la ruta
+          routeName: route?.name || 'Ruta desconocida',
+          routeColor: route?.color,
+          date: date,
+          total: dateStats.total,
+          assigned: dateStats.assigned
+        })
       }
     })
+  })
+  
+  // Ordenar por fecha descendente y tomar los primeros 5
+  return shifts
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 5)
 })
@@ -315,12 +339,13 @@ function goToSelectedWeek(event) {
 }
 
 function getShiftsForDay(routeId, dateStr) {
-  const shift = shiftsData.value.find(s => s.routeId === routeId && s.date === dateStr)
-  if (!shift) return null
+  const stats = weekStats.value.byRoute?.[routeId]?.byDate?.[dateStr]
+  if (!stats || stats.total === 0) return null
+  
   return {
-    total: shift.total,
-    assigned: shift.assigned,
-    allAssigned: shift.assigned === shift.total
+    total: stats.total,
+    assigned: stats.assigned,
+    allAssigned: stats.assigned === stats.total
   }
 }
 
@@ -345,30 +370,12 @@ function closeShiftsModal() {
 function handleSaveSchedule(scheduleData) {
   console.log('📅 Guardando horario:', scheduleData)
   
-  // Agregar a los datos locales
-  const dateStr = formatDateStr(scheduleData.date)
-  const existingIndex = shiftsData.value.findIndex(
-    s => s.routeId === scheduleData.routeId && s.date === dateStr
-  )
-  
-  // trips puede no venir si el guardado fue solo a BD
-  const tripsArray = scheduleData.trips || []
-  
-  const newShift = {
-    id: `shift-${Date.now()}`,
-    routeId: scheduleData.routeId,
-    date: dateStr,
-    total: tripsArray.length,
-    assigned: tripsArray.filter(t => t.busId).length
-  }
-  
-  if (existingIndex >= 0) {
-    shiftsData.value[existingIndex] = newShift
-  } else {
-    shiftsData.value.push(newShift)
-  }
-  
+  // El modal ya guardó los datos en la BD usando tripsStore.createTripsBatch
+  // Solo necesitamos recargar los datos de esa ruta/fecha
   closeShiftsModal()
+  
+  // Recargar datos de la semana actual para reflejar los cambios
+  loadTripsForCurrentWeek()
 }
 
 function viewRouteDetails(route) {
@@ -376,24 +383,52 @@ function viewRouteDetails(route) {
   // TODO: Implementar vista de detalles o abrir modal
 }
 
+// Función principal para cargar trips de la semana actual
+async function loadTripsForCurrentWeek() {
+  if (!routesList.value.length || !weekDays.value.length) {
+    console.log('⏳ Esperando rutas y días de la semana...')
+    return
+  }
+
+  try {
+    console.log('🔄 Cargando trips para la semana actual...')
+    
+    const dates = weekDays.value.map(d => d.dateStr)
+    await tripsStore.fetchTripsForWeek(routesList.value, dates)
+    
+    console.log('✅ Trips de la semana cargados')
+  } catch (error) {
+    console.error('❌ Error cargando trips de la semana:', error)
+  }
+}
+
+// Watch para recargar cuando cambia la semana
+watch(currentWeekStart, () => {
+  console.log('📅 Cambió la semana, recargando turnos...')
+  loadTripsForCurrentWeek()
+})
+
+
 // Inicialización
-onMounted(() => {
-  // Cargar rutas sin bloquear la renderización
-  // Usar un timeout para evitar que se congele si el servidor no responde
+onMounted(async () => {
+  console.log('🎯 Inicializando ShiftsView...')
+  
+  // 1. Cargar rutas primero
   const timeoutId = setTimeout(() => {
     console.warn('⚠️ Timeout cargando rutas')
   }, 5000)
 
-  routesStore.loadRoutes()
-    .then(() => {
-      clearTimeout(timeoutId)
-      console.log('📊 ShiftsView Dashboard cargado con rutas')
-    })
-    .catch(error => {
-      clearTimeout(timeoutId)
-      console.error('❌ Error cargando rutas en ShiftsView:', error)
-      // Continuar sin bloquear la renderización
-    })
+  try {
+    await routesStore.loadRoutes()
+    clearTimeout(timeoutId)
+    console.log('📊 Rutas cargadas')
+    
+    // 2. Cargar trips de la semana actual
+    await loadTripsForCurrentWeek()
+  } catch (error) {
+    clearTimeout(timeoutId)
+    console.error('❌ Error en inicialización:', error)
+  }
 })
 </script>
 
@@ -580,7 +615,50 @@ onMounted(() => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   overflow: hidden;
   margin-bottom: 32px;
+  position: relative;
 }
+
+/* Loading overlay */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e2e8f0;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-spinner p {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+}
+
 
 .table-container {
   overflow-x: auto;

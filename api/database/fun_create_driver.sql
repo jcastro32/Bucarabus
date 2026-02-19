@@ -1,10 +1,11 @@
 -- =============================================
 -- BucaraBUS - Función: Crear Nuevo Conductor
 -- =============================================
--- Versión: 2.0
--- Fecha: Febrero 2025
+-- Versión: 3.0
+-- Fecha: Febrero 2026
 -- Descripción: Crea un usuario con rol de conductor y sus detalles
 -- Arquitectura: tab_users + tab_user_roles + tab_driver_details
+-- Generación de ID: Secuencial (MAX + 1)
 -- =============================================
 
 -- Eliminar versiones anteriores
@@ -17,7 +18,7 @@ DROP FUNCTION IF EXISTS fun_create_driver(
 DROP TYPE IF EXISTS driver_created_type CASCADE;
 
 -- =============================================
--- Función: fun_create_driver v2.0
+-- Función: fun_create_driver v3.0
 -- =============================================
 CREATE OR REPLACE FUNCTION fun_create_driver(
     -- Datos del usuario
@@ -49,9 +50,6 @@ LANGUAGE plpgsql AS $$
 
 DECLARE
     v_new_id            INTEGER;
-    v_last_id           INTEGER;
-    v_random            INTEGER;
-    v_epoch_2025        CONSTANT INTEGER := 1735689600;
     v_email_clean       VARCHAR(320);
     v_name_clean        VARCHAR(100);
     v_cel_clean         VARCHAR(15);
@@ -254,25 +252,14 @@ BEGIN
     END IF;
 
     -- ====================================
-    -- 10. GENERAR ID DE USUARIO
+    -- 10. GENERAR ID DE USUARIO (SECUENCIAL)
     -- ====================================
     
-    -- Componente aleatorio (0-99) para evitar colisiones
-    v_random := FLOOR(RANDOM() * 100)::INTEGER;
-    
-    -- Calcular ID: (segundos desde epoch 2025 * 10) + random
-    -- Multiplicar por 10 da precisión de décimas de segundo
-    v_new_id := ((EXTRACT(EPOCH FROM NOW()) - v_epoch_2025) * 10)::INTEGER + v_random;
-    
-    -- Validar monotonía (nuevo ID > último ID)
-    SELECT COALESCE(MAX(tab_users.id_user), 0) INTO v_last_id 
+    -- Generar ID secuencial: MAX(id_user) + 1
+    SELECT COALESCE(MAX(tab_users.id_user), 0) + 1 INTO v_new_id 
     FROM tab_users;
     
-    IF v_new_id <= v_last_id THEN
-        msg := 'Error en generación de ID: nuevo ID (' || v_new_id || ') <= último ID (' || v_last_id || ')';
-        error_code := 'ID_NOT_MONOTONIC';
-        RETURN;
-    END IF;
+    RAISE NOTICE '[fun_create_driver] ID generado (secuencial): %', v_new_id;
 
     -- ====================================
     -- 11. INSERTAR USUARIO EN tab_users

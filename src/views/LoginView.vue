@@ -69,37 +69,6 @@
             <span v-else class="loading-spinner">⏳ Ingresando...</span>
           </button>
         </form>
-
-        <!-- Usuarios de prueba -->
-        <div class="demo-users">
-          <div class="demo-header">
-            <span class="demo-icon">🧪</span>
-            <span>Usuarios de prueba</span>
-          </div>
-          <div class="demo-list">
-            <div class="demo-user" @click="fillCredentials('admin')">
-              <div class="demo-avatar admin">👨‍💼</div>
-              <div class="demo-info">
-                <strong>Administrador</strong>
-                <small>admin@bucarabus.com / admin123</small>
-              </div>
-            </div>
-            <div class="demo-user" @click="fillCredentials('driver')">
-              <div class="demo-avatar driver">👨‍✈️</div>
-              <div class="demo-info">
-                <strong>Conductor</strong>
-                <small>conductor@bucarabus.com / conductor123</small>
-              </div>
-            </div>
-            <div class="demo-user" @click="fillCredentials('passenger')">
-              <div class="demo-avatar passenger">👤</div>
-              <div class="demo-info">
-                <strong>Pasajero</strong>
-                <small>pasajero@bucarabus.com / pasajero123</small>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- Footer -->
@@ -137,22 +106,6 @@ const showPassword = ref(false)
 const loading = ref(false)
 const error = ref(null)
 
-// Usuarios de prueba
-const demoUsers = {
-  admin: {
-    email: 'admin@bucarabus.com',
-    password: 'admin123'
-  },
-  driver: {
-    email: 'conductor@bucarabus.com',
-    password: 'conductor123'
-  },
-  passenger: {
-    email: 'pasajero@bucarabus.com',
-    password: 'pasajero123'
-  }
-}
-
 const handleLogin = async () => {
   loading.value = true
   error.value = null
@@ -186,15 +139,6 @@ const handleLogin = async () => {
   }
 }
 
-const fillCredentials = (userType) => {
-  const user = demoUsers[userType]
-  if (user) {
-    credentials.value.email = user.email
-    credentials.value.password = user.password
-    error.value = null
-  }
-}
-
 const goBack = () => {
   router.push('/')
 }
@@ -205,11 +149,9 @@ const goBack = () => {
   position: relative;
   min-height: 100vh;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  overflow-y: auto;
-  overflow-x: hidden;
   padding: 1rem;
 }
 
@@ -420,92 +362,6 @@ const goBack = () => {
   50% { opacity: 0.5; }
 }
 
-/* Usuarios demo */
-.demo-users {
-  margin-top: 1.25rem;
-  padding-top: 1.25rem;
-  border-top: 2px dashed #e2e8f0;
-}
-
-.demo-header {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #64748b;
-  margin-bottom: 0.85rem;
-}
-
-.demo-icon {
-  font-size: 1.1rem;
-}
-
-.demo-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.demo-user {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.65rem;
-  background: #f8fafc;
-  border: 2px solid #e2e8f0;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.demo-user:hover {
-  background: #f1f5f9;
-  border-color: #667eea;
-  transform: translateX(5px);
-}
-
-.demo-avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.25rem;
-  flex-shrink: 0;
-}
-
-.demo-avatar.admin {
-  background: linear-gradient(135deg, #667eea, #764ba2);
-}
-
-.demo-avatar.driver {
-  background: linear-gradient(135deg, #10b981, #059669);
-}
-
-.demo-avatar.passenger {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-}
-
-.demo-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.demo-info strong {
-  color: #1e293b;
-  font-size: 0.875rem;
-}
-
-.demo-info small {
-  color: #64748b;
-  font-size: 0.725rem;
-}
-
 /* Footer */
 .login-footer {
   text-align: center;
@@ -635,39 +491,6 @@ const goBack = () => {
   .form-group input {
     padding: 0.6rem 0.7rem;
     font-size: 0.875rem;
-  }
-
-  .demo-users {
-    margin-top: 1.15rem;
-    padding-top: 1.15rem;
-  }
-
-  .demo-header {
-    font-size: 0.8rem;
-    margin-bottom: 0.65rem;
-  }
-
-  .demo-list {
-    gap: 0.45rem;
-  }
-
-  .demo-user {
-    padding: 0.55rem;
-    gap: 0.65rem;
-  }
-
-  .demo-avatar {
-    width: 34px;
-    height: 34px;
-    font-size: 1.15rem;
-  }
-
-  .demo-info strong {
-    font-size: 0.825rem;
-  }
-
-  .demo-info small {
-    font-size: 0.675rem;
   }
 
   .btn-login {

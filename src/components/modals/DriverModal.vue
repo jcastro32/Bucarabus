@@ -238,6 +238,7 @@ import { useAppStore } from '../../stores/app'
 import { useDriversStore } from '../../stores/drivers'  
 import { useAuthStore } from '../../stores/auth'
 import { useFormValidation } from '../../composables/useFormValidation'
+import { SYSTEM_USER_ID } from '../../constants/system'
 
 const appStore = useAppStore()
 const driversStore = useDriversStore()
@@ -402,9 +403,13 @@ const handleSubmit = async () => {
   try {
     const driverData = {
       ...formData.value,
-      user_create: authStore.userId || 'system',
-      user_update: isEditMode.value ? (authStore.userId || 'system') : null
+      user_create: SYSTEM_USER_ID,
+      user_update: isEditMode.value ? SYSTEM_USER_ID : null
     }
+
+    console.log('🔍 DEBUG - SYSTEM_USER_ID:', SYSTEM_USER_ID)
+    console.log('🔍 DEBUG - driverData.user_create:', driverData.user_create)
+    console.log('🔍 DEBUG - tipo de user_create:', typeof driverData.user_create)
 
     // Remover password_confirm antes de enviar (solo necesitamos password)
     delete driverData.password_confirm

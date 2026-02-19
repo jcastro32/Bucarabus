@@ -309,8 +309,7 @@ const assignDriver = async () => {
   try {
     const result = await assignmentsApi.assignDriver(
       selectedBus.value.plate_number,
-      selectedDriver.value.id_user,
-      'admin'
+      selectedDriver.value.id_user
     )
 
     if (result.success) {
@@ -371,7 +370,7 @@ const unassignDriver = async (bus) => {
   if (!confirmed) return
 
   try {
-    const result = await assignmentsApi.unassignDriver(bus.plate_number, 'admin')
+    const result = await assignmentsApi.unassignDriver(bus.plate_number)
 
     if (result.success) {
       await busesStore.fetchBuses()

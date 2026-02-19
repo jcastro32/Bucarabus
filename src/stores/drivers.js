@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import apiClient from '../api/client'
+import { SYSTEM_USER_ID } from '../constants/system'
 
 export const useDriversStore = defineStore('drivers', () => {
   // =============================================
@@ -116,7 +117,7 @@ export const useDriversStore = defineStore('drivers', () => {
         license_exp: driverData.license_exp,
         address_driver: driverData.address_driver || null,
         photo_driver: driverData.photo_driver || null,
-        user_create: driverData.user_create || 'system'
+        user_create: driverData.user_create || SYSTEM_USER_ID
       }
 
       console.log('📤 Enviando datos a la API (sin password por seguridad):', { ...payload, password: '***' })
@@ -168,7 +169,7 @@ export const useDriversStore = defineStore('drivers', () => {
         photo_driver: driverData.photo_driver || null,
         date_entry: driverData.date_entry,
         status_driver: driverData.status_driver,
-        user_update: driverData.user_update || 'system'
+        user_update: driverData.user_update || SYSTEM_USER_ID
       }
 
       console.log('📤 Actualizando conductor:', driverId, payload)

@@ -192,11 +192,10 @@
                 <label>Rol Inicial</label>
                 <select v-model="userForm.initial_role">
                   <option value="1">Pasajero</option>
-                  <option value="2">Conductor</option>
                   <option value="3">Supervisor</option>
                   <option value="4">Administrador</option>
                 </select>
-                <small class="form-hint">Puedes agregar más roles después de crear el usuario</small>
+                <small class="form-hint">Los conductores deben crearse desde el módulo de Conductores</small>
               </div>
             </div>
 
@@ -349,10 +348,9 @@ const userForm = ref({
   initial_role: '1' // Pasajero por defecto
 })
 
-// Roles disponibles
+// Roles disponibles (excluyendo Conductor que debe crearse desde su módulo)
 const allRoles = [
   { id: 1, name: 'Pasajero' },
-  { id: 2, name: 'Conductor' },
   { id: 3, name: 'Supervisor' },
   { id: 4, name: 'Administrador' }
 ]
@@ -456,6 +454,7 @@ const saveUser = async () => {
         full_name: userForm.value.full_name,
         avatar_url: userForm.value.avatar_url
       })
+      await loadUsers() // Recargar lista para reflejar cambios
       alert('Usuario actualizado exitosamente')
     } else {
       // Crear nuevo usuario
@@ -466,12 +465,31 @@ const saveUser = async () => {
         avatar_url: userForm.value.avatar_url,
         initial_role: parseInt(userForm.value.initial_role)
       })
+      await loadUsers() // Recargar lista para reflejar cambios
       alert('Usuario creado exitosamente')
     }
     closeUserModal()
   } catch (error) {
-    console.error('Error guardando usuario:', error)
-    alert(error.response?.data?.message || 'Error al guardar usuario')
+    console.error('❌ Error guardando usuario:', error)
+    console.error('📋 Response data:', error.response?.data)
+    console.error('📋 Response status:', error.response?.status)
+    console.error('📋 Response headers:', error.response?.headers)
+    
+    const backendMessage = error.response?.data?.message
+    const errorCode = error.response?.data?.error_code
+    const genericMessage = error.message || 'Error desconocido al guardar usuario'
+    
+    let errorMessage = '❌ Error al crear usuario\n\n'
+    if (backendMessage) {
+      errorMessage += backendMessage
+      if (errorCode) {
+        errorMessage += `\n\nCódigo: ${errorCode}`
+      }
+    } else {
+      errorMessage += genericMessage
+    }
+    
+    alert(errorMessage)
   } finally {
     isSubmitting.value = false
   }
@@ -494,10 +512,11 @@ const addRole = async () => {
   
   try {
     await usersStore.assignRole(selectedUser.value.id_user, parseInt(roleToAdd.value))
-    alert('Rol asignado exitosamente')
-    // Recargar el usuario para actualizar la vista
+    await loadUsers() // Recargar lista completa
+    // Actualizar referencia al usuario en el modal
     selectedUser.value = usersStore.users.find(u => u.id_user === selectedUser.value.id_user)
     roleToAdd.value = ''
+    alert('Rol asignado exitosamente')
   } catch (error) {
     console.error('Error agregando rol:', error)
     alert(error.response?.data?.message || 'Error al agregar rol')
@@ -514,9 +533,10 @@ const removeRole = async (roleId) => {
 
   try {
     await usersStore.removeRole(selectedUser.value.id_user, roleId)
-    alert('Rol eliminado exitosamente')
-    // Recargar el usuario para actualizar la vista
+    await loadUsers() // Recargar lista completa
+    // Actualizar referencia al usuario en el modal
     selectedUser.value = usersStore.users.find(u => u.id_user === selectedUser.value.id_user)
+    alert('Rol eliminado exitosamente')
   } catch (error) {
     console.error('Error quitando rol:', error)
     alert(error.response?.data?.message || 'Error al quitar rol')
@@ -551,6 +571,7 @@ const updatePassword = async () => {
   isSubmitting.value = true
   try {
     await usersStore.changePassword(selectedUser.value.id_user, newPassword.value)
+    await loadUsers() // Recargar lista para reflejar cambios
     closePasswordModal()
     alert('Contraseña actualizada exitosamente')
   } catch (error) {
@@ -567,6 +588,7 @@ const toggleStatus = async (user) => {
 
   try {
     await usersStore.toggleUserStatus(user.id_user, !user.is_active)
+    await loadUsers() // Recargar lista para reflejar cambios
     alert(`Usuario ${action}do exitosamente`)
   } catch (error) {
     console.error('Error cambiando estado:', error)

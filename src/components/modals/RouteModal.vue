@@ -71,6 +71,7 @@
 import { ref, watch } from 'vue'
 import { useRoutesStore } from '../../stores/routes'
 import { useAppStore } from '../../stores/app'
+import { SYSTEM_USER_ID } from '../../constants/system'
 
 const props = defineProps({
   data: {
@@ -93,7 +94,7 @@ const formData = ref({
   color: '#ef4444',
   description: '',
   path: [],
-  user: 'admin' // Usuario por defecto para auditoría
+  user: SYSTEM_USER_ID // ID del usuario del sistema para auditoría
 })
 
 const errors = ref({})
@@ -111,7 +112,7 @@ watch(() => props.data, (newData) => {
       color: '#ef4444',
       description: '',
       path: newData.path,
-      user: 'admin'
+      user: SYSTEM_USER_ID
     }
   } else if (!props.isEdit) {
     // Modo nuevo sin path
@@ -121,7 +122,7 @@ watch(() => props.data, (newData) => {
       color: '#ef4444',
       description: '',
       path: [],
-      user: 'admin'
+      user: SYSTEM_USER_ID
     }
   }
 }, { immediate: true })
@@ -170,7 +171,7 @@ const handleSave = () => {
     color: formData.value.color,
     description: formData.value.description?.trim() || '',
     path: formData.value.path || [],
-    user: formData.value.user || 'admin'
+    user: formData.value.user || SYSTEM_USER_ID
   }
 
   try {

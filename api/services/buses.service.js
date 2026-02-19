@@ -1,5 +1,5 @@
 import pool from '../config/database.js'
-
+const SYSTEM_USER_ID = 1;
 class BusesService {
   /**
    * Obtener todos los buses
@@ -155,7 +155,7 @@ class BusesService {
         rce_exp,
         id_card_owner,
         name_owner,
-        user_create = 'system'
+        user_create = SYSTEM_USER_ID
       } = busData;
 
       const result = await pool.query(
@@ -220,7 +220,7 @@ class BusesService {
         id_card_owner,
         name_owner,
         is_active = true,
-        user_update = 'system'
+        user_update = SYSTEM_USER_ID
       } = busData;
 
       const result = await pool.query(

@@ -1,6 +1,7 @@
 import express from 'express'
 import usersService from '../services/users.service.js'
 
+const SYSTEM_USER_ID = 1;
 const router = express.Router()
 
 /**
@@ -97,6 +98,12 @@ router.get('/:id', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
+    console.log('🔵 POST /api/users - Petición recibida')
+    console.log('   URL completa:', req.originalUrl)
+    console.log('   Método:', req.method)
+    console.log('   Path:', req.path)
+    console.log('   BaseURL:', req.baseUrl)
+    
     const { email, password, full_name, avatar_url, initial_role, user } = req.body
 
     console.log('📨 POST /api/users - Body recibido:', { 
@@ -125,7 +132,7 @@ router.post('/', async (req, res) => {
       full_name,
       avatar_url,
       initial_role,
-      user_create: user || 'admin'
+      user_create: user || SYSTEM_USER_ID
     })
 
     console.log('📤 Resultado del servicio:', { success: result.success, message: result.message })
@@ -182,7 +189,7 @@ router.put('/:id', async (req, res) => {
     const result = await usersService.updateUser(userId, {
       full_name,
       avatar_url,
-      user_update: user || 'admin'
+      user_update: user || SYSTEM_USER_ID
     })
 
     if (!result.success) {

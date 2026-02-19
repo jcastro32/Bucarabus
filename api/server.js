@@ -3,6 +3,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import { createServer } from 'http'  // 🆕 Para WebSocket
 import { Server } from 'socket.io'   // 🆕 Socket.io
+import authRouter from './routes/auth.routes.js'          // 🆕 Autenticación
 import routesRouter from './routes/routes.routes.js'
 import driversRouter from './routes/drivers.routes.js'
 import busesRouter from './routes/buses.routes.js'
@@ -182,6 +183,7 @@ app.get('/health', (req, res) => {
 })
 
 // API Routes
+app.use('/api/auth', authRouter)      // 🆕 Autenticación
 app.use('/api/routes', routesRouter)
 app.use('/api/drivers', driversRouter)
 app.use('/api/buses', busesRouter)

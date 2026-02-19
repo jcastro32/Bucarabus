@@ -1,50 +1,7 @@
 <template>
   <div class="driver-app" :class="{ 'shift-active': shiftActive }">
-    <!-- Login Screen -->
-    <div v-if="!isLoggedIn" class="login-screen">
-      <div class="login-container">
-        <div class="login-header">
-          <div class="logo">🚌</div>
-          <h1>BucaraBus</h1>
-          <p>App Conductor</p>
-        </div>
-        
-        <form @submit.prevent="handleLogin" class="login-form">
-          <div class="form-group">
-            <label>Cédula</label>
-            <input 
-              v-model="loginForm.cedula" 
-              type="text" 
-              placeholder="Ingresa tu cédula"
-              required
-              inputmode="numeric"
-            />
-          </div>
-          
-          <div class="form-group">
-            <label>PIN</label>
-            <input 
-              v-model="loginForm.pin" 
-              type="password" 
-              placeholder="****"
-              maxlength="4"
-              required
-              inputmode="numeric"
-            />
-          </div>
-          
-          <button type="submit" class="btn-login" :disabled="isLoggingIn">
-            <span v-if="isLoggingIn">Verificando...</span>
-            <span v-else>Ingresar</span>
-          </button>
-          
-          <p v-if="loginError" class="login-error">{{ loginError }}</p>
-        </form>
-      </div>
-    </div>
-
     <!-- Main App Screen -->
-    <div v-else class="main-screen">
+    <div class="main-screen">
       <!-- Header -->
       <header class="app-header">
         <div class="driver-info">
@@ -54,9 +11,49 @@
             <span class="driver-bus">🚌 {{ driver.busPlate }}</span>
           </div>
         </div>
-        <button @click="handleLogout" class="btn-logout">
-          Salir
-        </button>
+        
+        <!-- User Menu -->
+        <div class="user-menu-container" v-if="authStore.isAuthenticated">
+          <button class="user-menu-btn" @click="showUserMenu = !showUserMenu">
+            <span class="user-avatar">{{ authStore.userAvatar }}</span>
+            <span class="menu-arrow">▼</span>
+          </button>
+          
+          <!-- Dropdown Menu -->
+          <div v-if="showUserMenu" class="user-dropdown">
+            <!-- User Info -->
+            <div class="dropdown-header">
+              <div class="dropdown-avatar">{{ authStore.userAvatar }}</div>
+              <div class="dropdown-info">
+                <div class="dropdown-name">{{ authStore.userName }}</div>
+                <div class="dropdown-role">{{ authStore.getRoleName(authStore.userRole) }}</div>
+              </div>
+            </div>
+            
+            <!-- Role Switcher (if multiple roles) -->
+            <div v-if="authStore.hasMultipleRoles" class="dropdown-section">
+              <div class="section-title">🔄 Cambiar rol</div>
+              <button
+                v-for="role in authStore.availableRoles"
+                :key="role.id_role"
+                @click="handleRoleSwitch(role)"
+                class="role-option"
+                :class="{ active: isActiveRole(role) }"
+              >
+                <span class="role-icon">{{ getRoleIcon(role.id_role) }}</span>
+                <span class="role-name">{{ role.role_name || getRoleNameById(role.id_role) }}</span>
+                <span v-if="isActiveRole(role)" class="active-check">✓</span>
+              </button>
+            </div>
+            
+            <!-- Logout -->
+            <div class="dropdown-section">
+              <button @click="handleLogout" class="btn-logout-menu">
+                <span>🚪</span> Cerrar sesión
+              </button>
+            </div>
+          </div>
+        </div>
       </header>
 
       <!-- Connection Status -->
@@ -196,8 +193,13 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 import { io } from 'socket.io-client'
 import L from 'leaflet'
+
+const router = useRouter()
+const authStore = useAuthStore()
 
 // ============================================
 // STATE
@@ -227,19 +229,10 @@ const getApiUrl = () => {
 }
 const API_URL = getApiUrl()
 
-// Auth
-const isLoggedIn = ref(false)
-const isLoggingIn = ref(false)
-const loginError = ref('')
-const loginForm = ref({
-  cedula: '',
-  pin: ''
-})
-
-// Driver data
+// Driver data (obtenida del authStore)
 const driver = ref({
-  id: null,
-  name: '',
+  id: authStore.userId,
+  name: authStore.userName,
   cedula: '',
   busId: null,
   busPlate: '',
@@ -272,59 +265,58 @@ let leafletMap = null
 let routePolyline = null
 let driverMarker = null
 
+// User menu
+const showUserMenu = ref(false)
+
 // ============================================
-// LOGIN
+// INITIALIZATION
 // ============================================
-const handleLogin = async () => {
-  isLoggingIn.value = true
-  loginError.value = ''
+const initializeDriver = async () => {
+  // Verificar que el usuario esté autenticado
+  if (!authStore.isAuthenticated) {
+    console.error('❌ Usuario no autenticado, redirigiendo a login')
+    router.push('/login')
+    return
+  }
+  
+  // Verificar que tenga rol de conductor
+  if (authStore.userRole !== 'driver') {
+    console.warn('⚠️ Usuario no tiene rol de conductor')
+    // Podría redirigir o mostrar mensaje
+  }
   
   try {
-    // Buscar conductor por cédula
+    // Buscar información del conductor
     const response = await fetch(`${API_URL}/api/drivers`)
     const data = await response.json()
     
     if (data.success) {
-      const foundDriver = data.data.find(d => 
-        d.id_user.toString() === loginForm.value.cedula || 
-        d.cedula_driver === loginForm.value.cedula
-      )
+      const foundDriver = data.data.find(d => d.id_user === authStore.userId)
       
       if (foundDriver) {
-        // En producción verificar PIN real
-        // Por ahora aceptamos cualquier PIN de 4 dígitos
-        if (loginForm.value.pin.length === 4) {
-          driver.value = {
-            id: foundDriver.id_user,
-            name: foundDriver.name_driver,
-            cedula: foundDriver.cedula_driver,
-            busId: null,
-            busPlate: '',
-            routeId: null
-          }
-          
-          // Buscar turno activo del conductor
-          await loadActiveShift()
-          
-          isLoggedIn.value = true
-          
-          // Inicializar mapa después del login
-          nextTick(() => {
-            initMap()
-            connectWebSocket()
-          })
-        } else {
-          loginError.value = 'PIN debe tener 4 dígitos'
+        driver.value = {
+          id: foundDriver.id_user,
+          name: foundDriver.name_driver,
+          cedula: foundDriver.cedula_driver,
+          busId: null,
+          busPlate: '',
+          routeId: null
         }
+        
+        // Cargar turno activo del conductor
+        await loadActiveShift()
+        
+        // Inicializar mapa
+        nextTick(() => {
+          initMap()
+          connectWebSocket()
+        })
       } else {
-        loginError.value = 'Conductor no encontrado'
+        console.error('❌ No se encontró información del conductor')
       }
     }
   } catch (error) {
-    console.error('Error login:', error)
-    loginError.value = 'Error de conexión'
-  } finally {
-    isLoggingIn.value = false
+    console.error('❌ Error inicializando conductor:', error)
   }
 }
 
@@ -386,11 +378,11 @@ const loadActiveShift = async () => {
         // Crear un mapa de rutas por ID para acceso rápido
         if (Array.isArray(routesData)) {
           routesData.forEach(route => {
-            allRoutes[route.id_route] = route
+            allRoutes[route.id] = route
           })
         } else if (routesData.data && Array.isArray(routesData.data)) {
           routesData.data.forEach(route => {
-            allRoutes[route.id_route] = route
+            allRoutes[route.id] = route
           })
         }
         console.log('✅ Rutas en caché:', Object.keys(allRoutes))
@@ -574,16 +566,69 @@ const updateCurrentTrip = () => {
   }
 }
 
-const handleLogout = () => {
+const handleLogout = async () => {
   if (shiftActive.value) {
-    if (!confirm('¿Terminar turno y salir?')) return
+    if (!confirm('¿Terminar turno y cerrar sesión?')) return
     endShift()
   }
   
   disconnectWebSocket()
-  isLoggedIn.value = false
-  driver.value = { id: null, name: '', cedula: '', busId: null, busPlate: '', routeId: null }
-  loginForm.value = { cedula: '', pin: '' }
+  
+  // Cerrar sesión y redirigir al login
+  authStore.logout()
+  router.push('/login')
+}
+
+// ============================================
+// USER MENU & AUTH
+// ============================================
+const handleRoleSwitch = (role) => {
+  const roleKey = authStore.roleIdToKey(role.id_role)
+  const result = authStore.switchRole(roleKey)
+  
+  if (result.success) {
+    showUserMenu.value = false
+    
+    // Redirect based on new role
+    let redirectPath = '/monitor'
+    if (roleKey === 'driver') redirectPath = '/conductor'
+    else if (roleKey === 'passenger') redirectPath = '/pasajero'
+    else if (roleKey === 'supervisor' || roleKey === 'admin') redirectPath = '/monitor'
+    
+    router.push(redirectPath)
+  }
+}
+
+const isActiveRole = (role) => {
+  return authStore.roleIdToKey(role.id_role) === authStore.userRole
+}
+
+const getRoleIcon = (roleId) => {
+  const icons = {
+    4: '👨‍💼', // Admin
+    3: '👨‍🏫', // Supervisor
+    2: '👨‍✈️', // Driver
+    1: '👤'   // Passenger
+  }
+  return icons[roleId] || '👤'
+}
+
+const getRoleNameById = (roleId) => {
+  const names = {
+    4: 'Administrador',
+    3: 'Supervisor',
+    2: 'Conductor',
+    1: 'Pasajero'
+  }
+  return names[roleId] || 'Usuario'
+}
+
+// Close user menu when clicking outside
+const handleClickOutside = (event) => {
+  const userMenu = event.target.closest('.user-menu-container')
+  if (!userMenu) {
+    showUserMenu.value = false
+  }
 }
 
 // ============================================
@@ -961,10 +1006,16 @@ watch(() => currentTrip.value?.id_trip, (newTripId, oldTripId) => {
 // LIFECYCLE
 // ============================================
 onMounted(() => {
+  // Inicializar conductor con datos del authStore
+  initializeDriver()
+  
   // Prevenir que el celular se bloquee
   if ('wakeLock' in navigator) {
     navigator.wakeLock.request('screen').catch(console.error)
   }
+  
+  // Click outside to close user menu
+  document.addEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {
@@ -975,6 +1026,9 @@ onUnmounted(() => {
     leafletMap.remove()
     leafletMap = null
   }
+  
+  // Remove event listener
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -989,122 +1043,6 @@ onUnmounted(() => {
   background: #0f172a;
   color: white;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-/* ============================================
-   LOGIN SCREEN
-   ============================================ */
-
-.login-screen {
-  min-height: 100vh;
-  min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-}
-
-.login-container {
-  width: 100%;
-  max-width: 360px;
-}
-
-.login-header {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.logo {
-  font-size: 64px;
-  margin-bottom: 16px;
-  animation: bounce 2s infinite;
-}
-
-@keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
-
-.login-header h1 {
-  font-size: 28px;
-  font-weight: 700;
-  margin: 0;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.login-header p {
-  color: #94a3b8;
-  margin-top: 4px;
-}
-
-.login-form {
-  background: #1e293b;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-}
-
-.form-group {
-  margin-bottom: 20px;
-}
-
-.form-group label {
-  display: block;
-  font-size: 14px;
-  font-weight: 500;
-  color: #94a3b8;
-  margin-bottom: 8px;
-}
-
-.form-group input {
-  width: 100%;
-  padding: 14px 16px;
-  font-size: 16px;
-  background: #0f172a;
-  border: 2px solid #334155;
-  border-radius: 10px;
-  color: white;
-  transition: all 0.3s;
-}
-
-.form-group input:focus {
-  outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
-}
-
-.btn-login {
-  width: 100%;
-  padding: 16px;
-  font-size: 16px;
-  font-weight: 600;
-  color: white;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.btn-login:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-}
-
-.btn-login:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.login-error {
-  color: #f87171;
-  text-align: center;
-  margin-top: 16px;
-  font-size: 14px;
 }
 
 /* ============================================
@@ -1152,14 +1090,180 @@ onUnmounted(() => {
   color: #94a3b8;
 }
 
-.btn-logout {
-  padding: 8px 16px;
-  font-size: 12px;
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.1);
-  border: 1px solid rgba(248, 113, 113, 0.3);
-  border-radius: 8px;
+/* User Menu */
+.user-menu-container {
+  position: relative;
+}
+
+.user-menu-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  color: white;
   cursor: pointer;
+  transition: all 0.2s;
+}
+
+.user-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.user-avatar {
+  font-size: 1.2rem;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.menu-arrow {
+  font-size: 0.7rem;
+  margin-left: 2px;
+}
+
+/* Dropdown */
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  min-width: 240px;
+  overflow: hidden;
+  z-index: 2000;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.dropdown-avatar {
+  font-size: 2rem;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+}
+
+.dropdown-info {
+  flex: 1;
+}
+
+.dropdown-name {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 2px;
+}
+
+.dropdown-role {
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
+/* Dropdown Sections */
+.dropdown-section {
+  padding: 8px 0;
+  border-top: 1px solid #eee;
+}
+
+.dropdown-section:first-child {
+  border-top: none;
+}
+
+.section-title {
+  padding: 8px 16px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Role Options */
+.role-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: white;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s;
+  color: #333;
+}
+
+.role-option:hover {
+  background: #f5f7fa;
+}
+
+.role-option.active {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+  border-left: 3px solid #667eea;
+}
+
+.role-icon {
+  font-size: 1.3rem;
+  width: 28px;
+  text-align: center;
+}
+
+.role-name {
+  flex: 1;
+  font-size: 0.95rem;
+}
+
+.active-check {
+  color: #667eea;
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+/* Logout Button in Menu */
+.btn-logout-menu {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: white;
+  border: none;
+  color: #f44336;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-logout-menu:hover {
+  background: #ffebee;
 }
 
 /* Connection Status */

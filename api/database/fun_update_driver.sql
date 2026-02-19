@@ -106,9 +106,9 @@ BEGIN
     -- Verificar que tiene rol de conductor activo
     SELECT EXISTS(
         SELECT 1 FROM tab_user_roles 
-        WHERE id_user = wid_user 
-          AND id_role = 2 
-          AND is_active = TRUE
+        WHERE tab_user_roles.id_user = wid_user 
+          AND tab_user_roles.id_role = 2 
+          AND tab_user_roles.is_active = TRUE
     ) INTO v_is_driver;
     
     IF NOT v_is_driver THEN
@@ -259,7 +259,7 @@ BEGIN
     IF wavailable IS NULL THEN
         SELECT available INTO v_available_status
         FROM tab_driver_details
-        WHERE id_user = wid_user;
+        WHERE tab_driver_details.id_user = wid_user;
         
         IF v_available_status IS NULL THEN
             v_available_status := TRUE; -- Default si no existe
@@ -318,7 +318,7 @@ BEGIN
             available = v_available_status,
             updated_at = NOW(),
             user_update = wuser_update
-        WHERE id_user = wid_user;
+        WHERE tab_driver_details.id_user = wid_user;
         
         GET DIAGNOSTICS v_rows_affected = ROW_COUNT;
         

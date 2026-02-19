@@ -659,8 +659,7 @@ const displayShiftBuses = async () => {
       
       // Obtener la ruta del store o parsear del shift
       let routePath = null
-      const storeRouteId = `RUTA_${String(shift.id_route).padStart(2, '0')}`
-      const storeRoute = routesStore.routes[storeRouteId]
+      const storeRoute = routesStore.routes[shift.id_route]
       
       if (storeRoute && storeRoute.path) {
         routePath = storeRoute.path

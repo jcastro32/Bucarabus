@@ -1,9 +1,10 @@
 import apiClient from './client.js'
+import { SYSTEM_USER_ID } from '../constants/system'
 
 /**
  * Asignar conductor a bus
  */
-export const assignDriver = async (plateNumber, idUser, user = 'admin') => {
+export const assignDriver = async (plateNumber, idUser, user = SYSTEM_USER_ID) => {
   const response = await apiClient.post('/assignments', {
     plate_number: plateNumber,
     id_user: idUser,
@@ -15,7 +16,7 @@ export const assignDriver = async (plateNumber, idUser, user = 'admin') => {
 /**
  * Desasignar conductor de bus
  */
-export const unassignDriver = async (plateNumber, user = 'admin') => {
+export const unassignDriver = async (plateNumber, user = SYSTEM_USER_ID) => {
   const response = await apiClient.delete(`/assignments/${plateNumber}`, {
     data: { user }
   })

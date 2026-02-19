@@ -2,6 +2,7 @@ import pool from '../config/database.js'
 import bcrypt from 'bcrypt'
 
 const SALT_ROUNDS = 10
+const SYSTEM_USER_ID = 1
 
 /**
  * Servicio para gestión de usuarios
@@ -151,7 +152,7 @@ async function createUser(userData) {
   const client = await pool.connect()
   
   try {
-    const { email, password, full_name, avatar_url, initial_role = 1, user_create = 'system' } = userData
+    const { email, password, full_name, avatar_url, initial_role = 1, user_create = SYSTEM_USER_ID } = userData
 
     console.log('📝 createUser - Datos recibidos:', { email, full_name, avatar_url, initial_role, user_create, passwordLength: password?.length })
 
@@ -172,23 +173,25 @@ async function createUser(userData) {
       }
     }
 
-    // Hashear contraseña con bcrypt
     console.log('🔐 Hasheando contraseña...')
     const password_hash = await bcrypt.hash(password, SALT_ROUNDS)
     console.log('✅ Contraseña hasheada correctamente, longitud:', password_hash.length)
+
+    // Convertir cadenas vacías en null para cumplir con validaciones SQL
+    const avatarUrlValue = avatar_url && avatar_url.trim() !== '' ? avatar_url : null
 
     // Llamar a la función almacenada
     const query = `
       SELECT * FROM fun_create_user($1, $2, $3, $4, $5)
     `
 
-    console.log('📞 Llamando a fun_create_user con:', { email, full_name, avatar_url, user_create })
+    console.log('📞 Llamando a fun_create_user con:', { email, full_name, avatar_url: avatarUrlValue, user_create })
     const result = await client.query(query, [
       email,
       password_hash,
       full_name,
-      avatar_url || null,
-      user_create
+      user_create,
+      avatarUrlValue
     ])
 
     console.log('✅ fun_create_user ejecutada, filas retornadas:', result.rows.length)
@@ -198,7 +201,19 @@ async function createUser(userData) {
     }
 
     const newUser = result.rows[0]
-    console.log('👤 Usuario creado con ID:', newUser.id_user)
+    console.log('� Resultado de fun_create_user:', newUser)
+    
+    // Verificar si la función retornó success = false
+    if (!newUser.success) {
+      console.log('❌ fun_create_user retornó error:', newUser.msg)
+      return {
+        success: false,
+        message: newUser.msg,
+        error_code: newUser.error_code
+      }
+    }
+    
+    console.log('�👤 Usuario creado con ID:', newUser.id_user)
 
     // Si se especificó un rol diferente a Pasajero (1), agregarlo
     if (initial_role && initial_role !== 1) {
@@ -268,7 +283,10 @@ async function createUser(userData) {
  */
 async function updateUser(userId, updates) {
   try {
-    const { full_name, avatar_url, user_update = 'system' } = updates
+    const { full_name, avatar_url, user_update = SYSTEM_USER_ID } = updates
+
+    // Convertir cadenas vacías en null para cumplir con validaciones SQL
+    const avatarUrlValue = avatar_url && avatar_url.trim() !== '' ? avatar_url : null
 
     // Llamar a la función almacenada
     const query = `
@@ -277,9 +295,9 @@ async function updateUser(userId, updates) {
 
     const result = await pool.query(query, [
       userId,
+      user_update,
       full_name || null,
-      avatar_url !== undefined ? avatar_url : null,
-      user_update
+      avatarUrlValue
     ])
 
     if (result.rows.length === 0) {

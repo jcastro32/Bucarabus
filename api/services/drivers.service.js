@@ -2,6 +2,8 @@ import pool from '../config/database.js';
 import bcrypt from 'bcrypt';
 
 const SALT_ROUNDS = 10;
+const SYSTEM_USER_ID = 1;
+
 class DriversService {
   /**
    * Obtener todos los conductores
@@ -106,7 +108,7 @@ class DriversService {
         license_exp,
         avatar_url = null,
         address_driver = null,
-        user_create = 'system'
+        user_create = SYSTEM_USER_ID
       } = driverData;
 
       console.log('📋 Valores extraídos:');
@@ -132,15 +134,23 @@ class DriversService {
           cel,
           license_cat,
           license_exp,
+          user_create,
           avatar_url,
-          address_driver,
-          user_create
+          address_driver
         ]
       );
 
       // 3. El resultado es un tipo personalizado
       if (result.rows.length === 0) {
         throw new Error('No se recibió respuesta de la función');
+      }
+
+      const functionResult = result.rows[0];
+      console.log('📥 Resultado de fun_create_driver:', functionResult);
+
+      // 3.1 Verificar si la función reportó error
+      if (!functionResult.success) {
+        throw new Error(functionResult.msg || 'Error al crear conductor');
       }
 
       // 4. Verificar el usuario creado
@@ -150,6 +160,9 @@ class DriversService {
       );
 
       if (userCheck.rows.length === 0) {
+        console.error('❌ Usuario NO encontrado después de fun_create_driver');
+        console.error('   Email buscado:', email);
+        console.error('   Resultado de función:', functionResult);
         throw new Error('Usuario no creado correctamente');
       }
 
@@ -214,7 +227,7 @@ class DriversService {
         address_driver = null,
         photo_driver = null,  // avatar_url
         available = true,
-        user_update = 'system'
+        user_update = SYSTEM_USER_ID
       } = driverData;
 
       console.log('📤 Actualizando conductor ID:', idUser, 'con datos:', driverData);
@@ -223,14 +236,14 @@ class DriversService {
         `SELECT * FROM fun_update_driver($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           idUser,
+          user_update,
           name_driver,      // full_name
+          photo_driver,     // avatar_url
           cel,
           license_cat,
           license_exp,
           address_driver,
-          photo_driver,     // avatar_url
-          available,
-          user_update
+          available
         ]
       );
 
