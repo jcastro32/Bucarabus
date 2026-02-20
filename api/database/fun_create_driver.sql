@@ -1,11 +1,12 @@
 -- =============================================
 -- BucaraBUS - Función: Crear Nuevo Conductor
 -- =============================================
--- Versión: 3.0
+-- Versión: 3.1
 -- Fecha: Febrero 2026
 -- Descripción: Crea un usuario con rol de conductor y sus detalles
 -- Arquitectura: tab_users + tab_user_roles + tab_driver_details
--- Generación de ID: Secuencial (MAX + 1)
+-- Generación de ID: Secuencial (MAX + 1) con LOCK TABLE
+-- Protección: Table-level lock para prevenir colisiones
 -- =============================================
 
 -- Eliminar versiones anteriores
@@ -252,8 +253,12 @@ BEGIN
     END IF;
 
     -- ====================================
-    -- 10. GENERAR ID DE USUARIO (SECUENCIAL)
+    -- 10. GENERAR ID DE USUARIO (SECUENCIAL + LOCK)
     -- ====================================
+    
+    -- Bloquear tabla para prevenir inserciones concurrentes (SHARE ROW EXCLUSIVE)
+    -- Permite lecturas pero previene modificaciones hasta el COMMIT
+    LOCK TABLE tab_users IN SHARE ROW EXCLUSIVE MODE;
     
     -- Generar ID secuencial: MAX(id_user) + 1
     SELECT COALESCE(MAX(tab_users.id_user), 0) + 1 INTO v_new_id 

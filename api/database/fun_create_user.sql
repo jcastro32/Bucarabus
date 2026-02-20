@@ -29,8 +29,9 @@
 --
 -- Retorna: (success, msg, error_code, id_user)
 --
--- Versión: 3.0 - Generación secuencial de IDs
--- Fecha: 2026-02-18
+-- Versión: 3.1 - Generación secuencial con LOCK TABLE
+-- Fecha: 2026-02-19
+-- Protección: Table-level lock para prevenir colisiones
 -- =============================================
 
 -- Eliminar función anterior (diferentes firmas)
@@ -239,11 +240,16 @@ BEGIN
   END IF;
   
   -- ==========================================
-  -- 8. GENERAR ID DE USUARIO (SECUENCIAL)
+  -- 8. GENERAR ID DE USUARIO (SECUENCIAL + LOCK)
   -- ==========================================
   
-  -- 8.1. Obtener el último ID y sumarle 1 (empezando desde 1 si no hay registros)
-  SELECT COALESCE(MAX(tab_users.id_user), 0) + 1 INTO v_generated_id FROM tab_users;
+  -- Bloquear tabla para prevenir inserciones concurrentes (SHARE ROW EXCLUSIVE)
+  -- Permite lecturas pero previene modificaciones hasta el COMMIT
+  LOCK TABLE tab_users IN SHARE ROW EXCLUSIVE MODE;
+  
+  -- 8.1. Obtener el último ID y sumarle 1
+  SELECT COALESCE(MAX(tab_users.id_user), 0) + 1 INTO v_generated_id 
+  FROM tab_users;
   
   RAISE NOTICE '[fun_create_user] ID generado (secuencial): %', v_generated_id;
   
