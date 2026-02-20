@@ -13,7 +13,7 @@ import apiClient from '../api/client'
 // - Los datos solo existen en memoria durante la sesión
 // - Para operaciones que necesiten uid/email, se re-autentica con backend
 // =============================================
-
+//hola
 // Usuarios de prueba
 const DEMO_USERS = {
   'admin@bucarabus.com': {
